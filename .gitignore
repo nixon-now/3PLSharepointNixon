@@ -1,0 +1,25 @@
+# Business Central AL Git Ignore
+
+# Build output
+.alpackages/
+bin/
+obj/
+*.app
+
+# VS Code settings
+.vscode/
+
+# Temporary files
+*.log
+*.tmp
+*.cache
+.DS_Store
+
+# User-specific config or secrets
+secrets.json
+settings.json
+.env
+
+# OS-specific junk
+Thumbs.db
+desktop.ini
