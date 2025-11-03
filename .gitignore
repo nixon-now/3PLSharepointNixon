@@ -1,25 +1,15 @@
-# Business Central AL Git Ignore
-
-# Build output
+# Ignore compiled AL packages and output builds
+*.app
 .alpackages/
+.vscode/.alcache/
+.output/
 bin/
 obj/
-*.app
 
-# VS Code settings
+# VS Code & build noise
 .vscode/
-
-# Temporary files
-*.log
+*.vsix
+*.zip
+*.rar
+*.bak
 *.tmp
-*.cache
-.DS_Store
-
-# User-specific config or secrets
-secrets.json
-settings.json
-.env
-
-# OS-specific junk
-Thumbs.db
-desktop.ini
