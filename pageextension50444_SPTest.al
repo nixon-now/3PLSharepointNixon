@@ -17,21 +17,64 @@ pageextension 50498 "SharePoint ShowGraphEndpoint" extends "SharePoint Setup"
                 var
                     FileName: Text;
                     Endpoint: Text;
-                    EndpointMsg: Label 'Graph API endpoint to upload this file:\n\n%1\n\nSite ID: %2\nLibrary ID: %3\nFolder: %4';
                 begin
-                    // Validate setup configuration first
                     if not ValidateSharePointSetup() then
                         exit;
 
-                    // Get file name from user
                     if not GetFileName(FileName) then
                         exit;
 
-                    // Compose endpoint URL
                     Endpoint := ComposeGraphEndpoint(FileName);
 
-                    // Display results
                     DisplayEndpointInfo(Endpoint, FileName);
+                end;
+            }
+
+            action("Show Graph Download Endpoint")
+            {
+                Caption = 'Show Graph Download Endpoint';
+                ApplicationArea = All;
+                Image = View;
+                Promoted = true;
+                PromotedCategory = Process;
+                ToolTip = 'Displays the Microsoft Graph API endpoint for downloading files from the configured SharePoint folder';
+
+                trigger OnAction()
+                var
+                    FileName: Text;
+                    Endpoint: Text;
+                begin
+                    if not ValidateSharePointSetup() then
+                        exit;
+
+                    if not GetFileName(FileName) then
+                        exit;
+
+                    Endpoint := ComposeGraphDownloadEndpoint(FileName);
+
+                    DisplayDownloadEndpointInfo(Endpoint, FileName);
+                end;
+            }
+
+            action("Show Graph Folder URL")
+            {
+                Caption = 'Show Graph Folder URL';
+                ApplicationArea = All;
+                Image = View;
+                Promoted = true;
+                PromotedCategory = Process;
+                ToolTip = 'Displays the SharePoint folder URL in Microsoft Graph (browser link)';
+
+                trigger OnAction()
+                var
+                    FolderUrl: Text;
+                begin
+                    if not ValidateSharePointSetup() then
+                        exit;
+
+                    FolderUrl := ComposeGraphFolderUrl();
+
+                    Message('SharePoint Folder URL (Graph):\n\n%1', FolderUrl);
                 end;
             }
 
@@ -79,16 +122,13 @@ pageextension 50498 "SharePoint ShowGraphEndpoint" extends "SharePoint Setup"
     end;
 
     local procedure GetFileName(var FileName: Text): Boolean
-var
-    //FileName: Text;
-    InStream: InStream;
-begin
-    if not UploadIntoStream('Select the file to upload', '', '', FileName, InStream) then
-        exit(false);
-    // Now FileName is set to the chosen filename
-    // InStream contains the file content
-    exit(FileName <> '');
-end;
+    var
+        InStream: InStream;
+    begin
+        if not UploadIntoStream('Select the file', '', '', FileName, InStream) then
+            exit(false);
+        exit(FileName <> '');
+    end;
 
     local procedure ComposeGraphEndpoint(FileName: Text): Text
     var
@@ -109,10 +149,63 @@ end;
             FileName));
     end;
 
+    local procedure ComposeGraphDownloadEndpoint(FileName: Text): Text
+    var
+        FolderPath: Text;
+    begin
+        FolderPath := Rec."SharePoint Export Folder";
+        if FolderPath = '' then
+            FolderPath := '/Shared Documents';
+
+        if not FolderPath.StartsWith('/') then
+            FolderPath := '/' + FolderPath;
+
+        exit(StrSubstNo(
+            'https://graph.microsoft.com/v1.0/sites/%1/drives/%2/root:%3/%4:/content',
+            Rec."SharePoint Site Id",
+            Rec."SharePoint Library Id",
+            FolderPath,
+            FileName));
+    end;
+
+    local procedure ComposeGraphFolderUrl(): Text
+    var
+        FolderPath: Text;
+    begin
+        FolderPath := Rec."SharePoint Export Folder";
+        if FolderPath = '' then
+            FolderPath := '/Shared Documents';
+
+        if not FolderPath.StartsWith('/') then
+            FolderPath := '/' + FolderPath;
+
+        exit(StrSubstNo(
+            'https://graph.microsoft.com/v1.0/sites/%1/drives/%2/root:%3',
+            Rec."SharePoint Site Id",
+            Rec."SharePoint Library Id",
+            FolderPath));
+    end;
+
     local procedure DisplayEndpointInfo(Endpoint: Text; FileName: Text)
     var
         EndpointMsg: Label 'Graph API Upload Endpoint:\n\n%1\n\nSite ID: %2\nLibrary ID: %3\nFolder: %4';
         CurlExampleMsg: Label 'Example cURL command:\n\ncurl -X PUT "%1" -H "Authorization: Bearer {access_token}" -H "Content-Type: application/octet-stream" --data-binary @%2';
+    begin
+        Message(
+            EndpointMsg,
+            Endpoint,
+            Rec."SharePoint Site Id",
+            Rec."SharePoint Library Id",
+            Rec."SharePoint Export Folder");
+
+        if Confirm('Do you want to see an example cURL command?') then
+            Message(CurlExampleMsg, Endpoint, FileName);
+    end;
+
+    local procedure DisplayDownloadEndpointInfo(Endpoint: Text; FileName: Text)
+    var
+        EndpointMsg: Label 'Graph API Download Endpoint:\n\n%1\n\nSite ID: %2\nLibrary ID: %3\nFolder: %4';
+        CurlExampleMsg: Label 'Example cURL command:\n\ncurl -X GET "%1" -H "Authorization: Bearer {access_token}" -o %2';
     begin
         Message(
             EndpointMsg,

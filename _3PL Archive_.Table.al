@@ -102,6 +102,12 @@ table 50410 "3PL Archive"
             DataClassification = SystemMetadata;
             Caption = 'Archive Date/Time';
         }
+          field(19; "SharePoint Export Folder"; Text[250])
+        {
+            DataClassification = SystemMetadata;
+            Caption = 'SharePoint Export Folder';
+            ToolTip = 'Path to the exported file in SharePoint';
+        }
         
     }
 
@@ -126,6 +132,7 @@ table 50410 "3PL Archive"
         key(UserID; "User ID")
         {
         }
+        
         key("Archive DateTime"; "Archive Date/Time")
         {
         }

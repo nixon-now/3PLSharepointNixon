@@ -1,89 +1,146 @@
 codeunit 50401 "3PL Archive Mgt."
 {
-    // Enhanced archive management for 3PL integrations
-    // Version with corrected telemetry logging
-    var CurrentIntegrationID: Guid;
-    procedure LogExport(DocumentNo: Code[20]; ExtDocNo: Code[35]; FileName: Text; Step: Option ExportOrder, ExportCOD, ImportPick, ImportShipment; Success: Boolean; ErrorMessage: Text)
+    // Keeps track of what we send to and get from our warehouse partners
+    // Fixed some logging issues
+    // Might want to add performance tracking someday
+    
+    var 
+        CurrentRunId: Guid;
+
+    procedure LogExport(DocNo: Code[20]; ExternalNo: Code[35]; FileName: Text; WhatStep: Option ExportOrder, ExportCOD, ImportPick, ImportShipment; ItWorked: Boolean; ProblemText: Text)
     var
-        Archive: Record "3PL Archive";
-        Setup: Record "Sharepoint Setup";
+        Arch: Record "3PL Archive";
+        Config: Record "Sharepoint Setup";
     begin
-        if not Setup.Get()then exit;
-        Archive.Init();
-        Archive."Entry No.":=GetNextEntryNo();
-        Archive."Archive Date/Time":=CurrentDateTime;
-        Archive."Direction":=Archive."Direction"::Export;
-        Archive."Document No.":=DocumentNo;
-        Archive."External Doc No.":=ExtDocNo;
-        Archive."File Name":=CopyStr(FileName, 1, MaxStrLen(Archive."File Name"));
-        Archive."Step":="3PL Archive Step"::ExportOrder;
-        Archive."User ID":=CopyStr(UserId(), 1, MaxStrLen(Archive."User ID"));
-        Archive."Integration ID":=GetCurrentIntegrationID();
-        Archive."ResultOption":=Archive.ResultOption::Success;
-        Archive."Error Message":=CopyStr(ErrorMessage, 1, MaxStrLen(Archive."Error Message"));
-        Archive."3PL Code":=Setup."3PL Code";
-        Archive."Location Code":=Setup."Location Code";
-        Archive.Insert(true);
-        LogArchiveEvent('ARCH100', Archive, DocumentNo);
+        // Need the setup to know where we're sending stuff
+        if not Config.Get() then 
+            exit;
+            
+        Arch.Init();
+        Arch."Entry No." := GetNextNo();
+        Arch."Archive Date/Time" := CurrentDateTime;
+        Arch."Direction" := Arch."Direction"::Export;
+        Arch."Document No." := DocNo;
+        Arch."External Doc No." := ExternalNo;
+        Arch."File Name" := CopyStr(FileName, 1, MaxStrLen(Arch."File Name"));
+        Arch."Step" := "3PL Archive Step"::ExportOrder;
+        Arch."User ID" := CopyStr(UserId(), 1, MaxStrLen(Arch."User ID"));
+        Arch."Integration ID" := GetThisRunId();
+        
+        if ItWorked then
+            Arch."ResultOption" := Arch.ResultOption::Success
+        else
+            Arch."ResultOption" := Arch.ResultOption::Error;
+            
+        Arch."Error Message" := CopyStr(ProblemText, 1, MaxStrLen(Arch."Error Message"));
+        Arch."3PL Code" := Config."3PL Code";
+        Arch."Location Code" := Config."Location Code";
+        Arch."SharePoint Export Folder" := Config."SharePoint Export Folder";
+        Arch.Insert(true);
+        
+        // Let's remember we did this
+        WriteToLog('ARCH100', Arch, DocNo);
     end;
-    procedure LogImport(DocumentNo: Code[20]; ExtDocNo: Code[35]; FileName: Text; Step: Option ExportOrder, ExportCOD, ImportPick, ImportShipment; Success: Boolean; ErrorMessage: Text)
+
+    procedure LogImport(DocNo: Code[20]; ExternalNo: Code[35]; FileName: Text; WhatStep: Option ExportOrder, ExportCOD, ImportPick, ImportShipment; ItWorked: Boolean; ProblemText: Text)
     var
-        Archive: Record "3PL Archive";
-        Setup: Record "Sharepoint Setup";
+        Arch: Record "3PL Archive";
+        Config: Record "Sharepoint Setup";
     begin
-        if not Setup.Get()then exit;
-        Archive.Init();
-        Archive."Entry No.":=GetNextEntryNo();
-        Archive."Archive Date/Time":=CurrentDateTime;
-        Archive."Direction":=Archive."Direction"::Import;
-        Archive."Document No.":=DocumentNo;
-        Archive."External Doc No.":=ExtDocNo;
-        Archive."File Name":=CopyStr(FileName, 1, MaxStrLen(Archive."File Name"));
-        Archive."Step":="3PL Archive Step"::ImportConfirmation;
-        Archive."User ID":=CopyStr(UserId(), 1, MaxStrLen(Archive."User ID"));
-        Archive."Integration ID":=GetCurrentIntegrationID();
-        Archive."ResultOption":=Archive.ResultOption::Success;
-        Archive."Error Message":=CopyStr(ErrorMessage, 1, MaxStrLen(Archive."Error Message"));
-        Archive."3PL Code":=Setup."3PL Code";
-        Archive."Location Code":=Setup."Location Code";
-        Archive.Insert(true);
-        LogArchiveEvent('ARCH101', Archive, DocumentNo);
+        // No config? Nothing to do here
+        if not Config.Get() then 
+            exit;
+            
+        Arch.Init();
+        Arch."Entry No." := GetNextNo();
+        Arch."Archive Date/Time" := CurrentDateTime;
+        Arch."Direction" := Arch."Direction"::Import;
+        Arch."Document No." := DocNo;
+        Arch."External Doc No." := ExternalNo;
+        Arch."File Name" := CopyStr(FileName, 1, MaxStrLen(Arch."File Name"));
+        Arch."Step" := "3PL Archive Step"::ImportConfirmation;
+        Arch."User ID" := CopyStr(UserId(), 1, MaxStrLen(Arch."User ID"));
+        Arch."Integration ID" := GetThisRunId();
+        
+        if ItWorked then
+            Arch."ResultOption" := Arch.ResultOption::Success
+        else
+            Arch."ResultOption" := Arch.ResultOption::Error;
+            
+        Arch."Error Message" := CopyStr(ProblemText, 1, MaxStrLen(Arch."Error Message"));
+        Arch."3PL Code" := Config."3PL Code";
+        Arch."Location Code" := Config."Location Code";
+        Arch.Insert(true);
+        
+        WriteToLog('ARCH101', Arch, DocNo);
     end;
-    local procedure GetNextEntryNo(): Integer var
-        Archive: Record "3PL Archive";
+
+    local procedure GetNextNo(): Integer 
+    var
+        Arch: Record "3PL Archive";
     begin
-        Archive.LockTable();
-        if Archive.FindLast()then exit(Archive."Entry No." + 1);
+        // Grab the next available number
+        Arch.LockTable();
+        if Arch.FindLast() then 
+            exit(Arch."Entry No." + 1);
         exit(1);
     end;
-    local procedure GetCurrentIntegrationID(): Guid begin
-        if IsNullGuid(CurrentIntegrationID)then CurrentIntegrationID:=CreateGuid();
-        exit(CurrentIntegrationID);
-    end;
-    local procedure GetResult(Success: Boolean): Option Success, Failed begin
-        if Success then exit(0); // Success
-        exit(1); // Failed
-    end;
-    procedure GetStep()Step: Option ExportOrder, ExportCOD, ImportPick, ImportShipment begin
-    // Public getter for step options
-    end;
-    procedure PurgeOldEntries(RetentionDays: Integer)
-    var
-        Archive: Record "3PL Archive";
-        PurgeDate: Date;
-        EntryCount: Integer;
+
+    local procedure GetThisRunId(): Guid 
     begin
-        if RetentionDays <= 0 then exit;
-        PurgeDate:=CalcDate(StrSubstNo('<-%1D>', RetentionDays), Today());
-        Archive.SetRange("Archive Date/Time", 0DT, CreateDateTime(PurgeDate, 0T));
-        EntryCount:=Archive.Count();
-        if EntryCount > 0 then begin
-            Archive.DeleteAll();
-            Session.LogMessage('ARCH200', StrSubstNo('Purged %1 archive entries older than %2', EntryCount, PurgeDate), Verbosity::Normal, DataClassification::SystemMetadata, TelemetryScope::ExtensionPublisher, 'Category_Archive', '3PL Integration');
+        // Make sure we have an ID for this batch of work
+        if IsNullGuid(CurrentRunId) then 
+            CurrentRunId := CreateGuid();
+        exit(CurrentRunId);
+    end;
+
+    procedure WasOrderExported(OrderNumber: Code[20]; IsCODOrder: Boolean): Boolean
+    var
+        Arch: Record "3PL Archive";
+    begin
+        // Check if we already sent this one out
+        Arch.Reset();
+        Arch.SetRange("Document No.", OrderNumber);
+        Arch.SetRange(Direction, Arch.Direction::Export);
+        
+        if IsCODOrder then
+            Arch.SetRange(Step, Arch.Step::ExportCOD)
+        else
+            Arch.SetRange(Step, Arch.Step::ExportOrder);
+            
+        Arch.SetRange("ResultOption", Arch."ResultOption"::Success);
+        
+        exit(Arch.FindFirst());
+    end;
+
+    procedure GetStepOptions() StepOptions: Option ExportOrder, ExportCOD, ImportPick, ImportShipment 
+    begin
+        // Just returns the options - might not really need this
+    end;
+
+    procedure CleanupOldStuff(KeepDays: Integer)
+    var
+        Arch: Record "3PL Archive";
+        RemoveBefore: Date;
+        HowMany: Integer;
+    begin
+        // Get rid of old records to keep things tidy
+        if KeepDays <= 0 then 
+            exit;
+            
+        RemoveBefore := CalcDate(StrSubstNo('<-%1D>', KeepDays), Today());
+        Arch.SetRange("Archive Date/Time", 0DT, CreateDateTime(RemoveBefore, 0T));
+        HowMany := Arch.Count();
+        
+        if HowMany > 0 then begin
+            Arch.DeleteAll();
+            Session.LogMessage('ARCH200', StrSubstNo('Cleaned out %1 old records from before %2', HowMany, RemoveBefore), Verbosity::Normal, DataClassification::SystemMetadata, TelemetryScope::ExtensionPublisher, 'Category_Archive', '3PL Integration');
         end;
     end;
-    local procedure LogArchiveEvent(EventId: Text; var Archive: Record "3PL Archive"; DocumentNo: Code[20])
+
+    local procedure WriteToLog(LogId: Text; var Arch: Record "3PL Archive"; DocNo: Code[20])
     begin
-        Session.LogMessage(EventId, StrSubstNo('%1 %2 for %3 (%4)', FORMAT(Archive."Direction"), FORMAT(Archive."Step"), DocumentNo, FORMAT(Archive."Result")), Verbosity::Normal, DataClassification::SystemMetadata, TelemetryScope::ExtensionPublisher, 'Category_Archive', '3PL Integration');
+        // Write a note about what we're doing
+        Session.LogMessage(LogId, StrSubstNo('%1 %2 for %3 (%4)', FORMAT(Arch."Direction"), FORMAT(Arch."Step"), DocNo, FORMAT(Arch."Result")), Verbosity::Normal, DataClassification::SystemMetadata, TelemetryScope::ExtensionPublisher, 'Category_Archive', '3PL Integration');
     end;
 }

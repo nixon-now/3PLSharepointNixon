@@ -25,7 +25,7 @@ tableextension 50450 "Sales Header 3PL" extends "Sales Header"
         field(50455; "3PL Exported"; Boolean)
         {
             DataClassification = CustomerContent;
-            Caption = '3PL Exported';
+            Caption = '3PL Order Exported';
         }
         field(50456; "Imported Pick Confirmation"; Boolean)
         {
@@ -47,11 +47,73 @@ tableextension 50450 "Sales Header 3PL" extends "Sales Header"
             DataClassification = CustomerContent;
             Caption = 'Imported Shipped Conf. Date';
         }
-         field(50460; "3PL COD Exported"; Boolean)
+        field(50460; "3PL COD Exported"; Boolean)
         {
             DataClassification = CustomerContent;
             Caption = 'Exported COD to 3PL';
         }
+        field(50461; "3PL Gift Wrap"; Boolean)
+        {
+            DataClassification = CustomerContent;
+            Caption = '3PL Gift Wrap';
+        }
+        field(50462; "3PL Gift Message"; Text[250])
+        {
+            DataClassification = CustomerContent;
+            Caption = '3PL Gift Message';
+        }
+        field(50463; "3PL Preparation Code"; Text[250])
+        {
+            DataClassification = CustomerContent;
+            Caption = '3PL Preparation Code';
+            //TableRelation = "Dimension Value".Code where("Dimension Code" = field("3PL Preparation Code"));
+
+            trigger OnValidate()
+            begin
+                //Update3PLPrepCodeDimension();
+            end;
+        }
+
+        // Helper field to store the dimension code
+        field(50467; "3PL Preparation Dimension Code"; Code[20])
+        {
+            DataClassification = CustomerContent;
+            Caption = '3PL Preparation Dimension Code"';
+            TableRelation = Dimension;
+        }
+        field(50464; "3PL Priority"; Integer)
+        {
+            Caption = 'Priority';
+            DataClassification = CustomerContent;
+        }
+        field(50465; "3PL COD"; Boolean)
+        {
+            Caption = 'COD';
+            DataClassification = CustomerContent;
+        }
+        field(50466; "3PL COD Amount"; Decimal)
+        {
+            Caption = 'COD Amount';
+            DataClassification = CustomerContent;
+        }
+         field(50469; "3PL Prep Code"; Code[20])
+        {
+            DataClassification = CustomerContent;
+            Caption = '3PL Prep Code';
+            TableRelation = "3PL Prep Code Setup".Code where(Blocked = const(false));
+            
+            trigger OnValidate()
+            begin
+                Update3PLPrepCodeDescription();
+            end;
+        }
+        field(50470; "3PL Prep Description"; Text[100])
+        {
+            DataClassification = CustomerContent;
+            Caption = '3PL Prep Description';
+            Editable = false;
+        }
+    
     }
 
     trigger OnAfterInsert()
@@ -64,22 +126,6 @@ tableextension 50450 "Sales Header 3PL" extends "Sales Header"
         "3PL Import Date" := 0D;
         "Imported Pick Conf. Date" := 0D;
         "Imported Shipped Conf. Date" := 0D;
-    end;
-
-    trigger OnAfterModify()
-    begin
-        if "3PL Imported" then
-            "3PL Import Date" := Today
-        else
-            "3PL Import Date" := 0D;
-        if "Imported Pick Confirmation" then
-            "Imported Pick Conf. Date" := Today
-        else
-            "Imported Pick Conf. Date" := 0D;
-        if "Imported Shipped Confirmation" then
-            "Imported Shipped Conf. Date" := Today
-        else
-            "Imported Shipped Conf. Date" := 0D;
     end;
 
     trigger OnAfterDelete()
@@ -108,4 +154,32 @@ tableextension 50450 "Sales Header 3PL" extends "Sales Header"
         "Imported Shipped Conf. Date" := 0D;
         Modify();
     end;
+
+      local procedure Update3PLPrepCodeDescription()
+    var
+        PrepCodeSetup: Record "3PL Prep Code Setup";
+    begin
+        if "3PL Prep Code" = '' then begin
+            "3PL Prep Description" := '';
+            exit;
+        end;
+
+        if PrepCodeSetup.Get("3PL Prep Code") then
+            "3PL Prep Description" := PrepCodeSetup.Description
+        else
+            "3PL Prep Description" := '';
+    end;
+
+    procedure GetDefault3PLPrepCode(): Code[20]
+    var
+        PrepCodeSetup: Record "3PL Prep Code Setup";
+    begin
+        PrepCodeSetup.SetRange("Default Code", true);
+        if PrepCodeSetup.FindFirst() then
+            exit(PrepCodeSetup.Code);
+        
+        exit('');
+    end;
 }
+
+

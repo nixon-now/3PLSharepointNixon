@@ -3,14 +3,14 @@
   "id": "9b5b312c-0c2e-463b-9be7-b727e2c8e504",
     "name": "3PL_SharePoint_Nixon",
     "publisher": "SHN",
-  "version": "1.0.1.1",
+  "version": "1.0.4.0",
   "runtime": "15.0",
   "target": "Cloud",
   "application": "26.2.34746.35601",
   "platform": "26.2.34746.35601",
   "resourceExposurePolicy": {
     "allowDebugging": true,
-    "allowDownloadingSource": true,
+    "allowDownloadingSource": false,
     "includeSourceInSymbolFile": true,
     "applyToDevExtension": false
 },
@@ -20,7 +20,7 @@
     "type": "al",
     "request": "attach",
     "environmentType": "Sandbox",
-    "environmentName": "Production_Copy",
+    "environmentName": "NixonAU_Sandbox",
     "breakOnError": "All",
     "breakOnRecordWrite": "None",
     "enableSqlInformationDebugger": true,
@@ -29,12 +29,12 @@
     "numberOfSqlStatements": 10,
     "breakOnNext": "WebServiceClient"
   },
-{
+  {
     "name": "Publish: Microsoft cloud sandbox",
     "type": "al",
     "request": "launch",
     "environmentType": "Sandbox",
-    "environmentName": "Production_Copy",
+    "environmentName": "NixonAU_Sandbox",
     "startupObjectId": 22,
     "breakOnError": "All",
     "breakOnRecordWrite": "None",
@@ -43,7 +43,16 @@
     "enableLongRunningSqlStatements": true,
     "longRunningSqlStatementsThreshold": 500,
     "numberOfSqlStatements": 10
-}
+  },
+  {
+    "name": "snapshotInitialize: Microsoft production cloud",
+    "type": "al",
+    "request": "snapshotInitialize",
+    "environmentType": "Production",
+    "environmentName": "EU_Production",
+    "breakOnNext": "WebClient",
+    "executionContext": "DebugAndProfile"
+  }
 ]
     
 }

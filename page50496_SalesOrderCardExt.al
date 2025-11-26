@@ -8,31 +8,33 @@ pageextension 50496 SalesOrderCard3PLExt extends "Sales Order"
             {
                 Caption = '3PL Integration';
 
-                field("3PL Imported"; Rec."3PL Imported")
+                 field("3PL PREP CODE"; Rec."3PL PREP CODE")
                 {
                     ApplicationArea = All;
-                    Caption = '3PL Imported';
+                    Caption = '3PL PREP CODE';
                 }
-                field("3PL Exported"; Rec."3PL Exported")
+                 field("3PL Exported"; Rec."3PL Exported")
                 {
                     ApplicationArea = All;
-                    Caption = '3PL Exported';
+                    Caption = '3PL Order Exported';
                 }
+                 field("3PL Export Date"; Rec."3PL Export Date")
+                {
+                    ApplicationArea = All;
+                    Caption = '3PL Export Date';
+                }
+                field("3PL COD Exported"; Rec."3PL COD Exported")
+                {
+                    ApplicationArea = All;
+                    Caption = '3PL COD Exported';
+                }
+               
                 field("3PL Tracking No."; Rec."3PL Tracking No.")
                 {
                     ApplicationArea = All;
                     Caption = '3PL Tracking No.';
                 }
-                field("3PL Export Date"; Rec."3PL Export Date")
-                {
-                    ApplicationArea = All;
-                    Caption = '3PL Export Date';
-                }
-                field("3PL Import Date"; Rec."3PL Import Date")
-                {
-                    ApplicationArea = All;
-                    Caption = '3PL Import Date';
-                }
+               
                 field("Imported Pick Confirmation"; Rec."Imported Pick Confirmation")
                 {
                     ApplicationArea = All;
