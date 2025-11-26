@@ -6,13 +6,11 @@ xmlport 50436 "Export Orders to 3PL_AU"
     Encoding           = UTF8;
     UseRequestPage     = false;
     PreserveWhiteSpace = true;
-    
 
     schema
     {
         textelement(orders)
         {
-            // Removed server element as not in target XML
             tableelement(SalesHeader; "Sales Header")
             {
                 XmlName  = 'order';
@@ -70,7 +68,7 @@ xmlport 50436 "Export Orders to 3PL_AU"
                         end;
                     }
 
-                  textelement(preparation_code)
+                    textelement(preparation_code)
                     {
                         MinOccurs = Once;
                         trigger OnBeforePassVariable()
@@ -78,16 +76,16 @@ xmlport 50436 "Export Orders to 3PL_AU"
                             preparation_code := SalesHeader."3PL Prep Code";
                         end;
                     }
+                    
                     textelement(status)
                     {
                         trigger OnBeforePassVariable()
                         begin
-                            // Set to empty or implement cancellation logic
                             status := '';
                         end;
                     }
 
-                    textelement(comment2)
+                    textelement(comment)
                     {
                         XmlName = 'comment';
                         trigger OnBeforePassVariable()
@@ -96,12 +94,13 @@ xmlport 50436 "Export Orders to 3PL_AU"
                         end;
                     }
 
-                    textelement(contact)
+                    textelement(contact_phone)
                     {
                         MinOccurs = Zero;
+                        XmlName = 'contact';
                         trigger OnBeforePassVariable()
                         begin
-                            contact := SalesHeader."Sell-to Phone No.";
+                            contact_phone := SalesHeader."Sell-to Phone No.";
                         end;
                     }
 
@@ -150,18 +149,17 @@ xmlport 50436 "Export Orders to 3PL_AU"
                     {
                         trigger OnBeforePassVariable()
                         var
-                        WorkDescriptionText: Text;
-                    begin
-                        // Get the work description as text
-                        WorkDescriptionText := GetWorkDescriptionText(SalesHeader);
-                        
-                        // Truncate to a reasonable length if needed, but don't use '*'
-                        if StrLen(WorkDescriptionText) > 250 then
-                            gift_message := CopyStr(WorkDescriptionText, 1, 250)
-                        else
-                            gift_message := WorkDescriptionText;
-                    end;
-                }
+                            WorkDescriptionText: Text;
+                        begin
+                            WorkDescriptionText := GetWorkDescriptionText(SalesHeader);
+                            
+                            if StrLen(WorkDescriptionText) > 250 then
+                                gift_message := CopyStr(WorkDescriptionText, 1, 250)
+                            else
+                                gift_message := WorkDescriptionText;
+                        end;
+                    }
+                    
                     textelement(language_code)
                     {
                         MinOccurs = Zero;
@@ -186,13 +184,13 @@ xmlport 50436 "Export Orders to 3PL_AU"
                         fieldelement(contact; SalesHeader."Sell-to Contact") { }
                         fieldelement(phone; SalesHeader."Sell-to Phone No.") { }
                         
-                        textelement(fax1)
+                        textelement(soldto_fax)
                         {
-                              MinOccurs = Zero;    
+                            MinOccurs = Zero;    
                             XmlName = 'fax';
                             trigger OnBeforePassVariable()
                             begin
-                                fax := '';
+                                soldto_fax := '';
                             end;
                         }
                         
@@ -204,7 +202,6 @@ xmlport 50436 "Export Orders to 3PL_AU"
                     {
                         fieldelement(code; SalesHeader."Ship-to Code") { }
                         
-                        // New elements for AU
                         textelement(clientstorecode)
                         {
                             trigger OnBeforePassVariable()
@@ -222,7 +219,6 @@ xmlport 50436 "Export Orders to 3PL_AU"
                         fieldelement(country; SalesHeader."Ship-to Country/Region Code") { }
                         fieldelement(postal; SalesHeader."Ship-to Post Code") { }
                         
-                        // New element for AU
                         textelement(clientdepartment)
                         {
                             trigger OnBeforePassVariable()
@@ -232,18 +228,18 @@ xmlport 50436 "Export Orders to 3PL_AU"
                         }
                         
                         fieldelement(contact; SalesHeader."Ship-to Contact") {
-                              MinOccurs = Zero;    
-                         }
+                            MinOccurs = Zero;    
+                        }
                         fieldelement(phone; SalesHeader."Ship-to Phone No.") { 
-                              MinOccurs = Zero;    
+                            MinOccurs = Zero;    
                         }
                         
-                        textelement(fax)
+                        textelement(shipto_fax)
                         {
-                              MinOccurs = Zero;    
+                            MinOccurs = Zero;    
                             trigger OnBeforePassVariable()
                             begin
-                                fax := '';
+                                shipto_fax := '';
                             end;
                         }
                         
@@ -267,8 +263,9 @@ xmlport 50436 "Export Orders to 3PL_AU"
                         AutoSave = false;
                         LinkTable = SalesHeader;
                         LinkFields = "Document No." = field("No.");
-                        SourceTableView = sorting("Document No.", "Line No.")
-                                          where(Type = const(Item));
+                        SourceTableView = sorting("Document Type", "Document No.", "Line No.")
+                                          where("Document Type" = const(Order),
+                                                Type = const(Item));
 
                         textattribute(LineNo)
                         {
@@ -287,12 +284,10 @@ xmlport 50436 "Export Orders to 3PL_AU"
                             end;
                         }
                         
-                        // New element for AU
                         textelement(gtin2)
                         {
                             trigger OnBeforePassVariable()
                             begin
-                                // Use same as GTIN if needed or implement separate logic
                                 gtin2 := GetGTIN2(SalesLine);
                             end;
                         }
@@ -327,26 +322,26 @@ xmlport 50436 "Export Orders to 3PL_AU"
                         fieldelement(description; SalesLine.Description) { }
                         fieldelement(qty; SalesLine.Quantity) { }
                         
-                        textelement(comment)
+                        textelement(line_comment)
                         {
                             MinOccurs = Zero;
+                            XmlName = 'comment';
                             trigger OnBeforePassVariable()
                             begin
-                                comment := '';
+                                line_comment := '';
                             end;
                         }
                         
                         textelement(unit_price)
-{
-    trigger OnBeforePassVariable()
-    begin
-        
-        if SalesLine."Unit Price" = 0 then
-            unit_price := '0'
-        else
-            unit_price := Format(SalesLine."Unit Price", 0, 9);
-    end;
-}
+                        {
+                            trigger OnBeforePassVariable()
+                            begin
+                                if SalesLine."Unit Price" = 0 then
+                                    unit_price := '0'
+                                else
+                                    unit_price := Format(SalesLine."Unit Price", 0, 9);
+                            end;
+                        }
                         
                         fieldelement(currency_code; SalesLine."Currency Code") { }
                     }
@@ -358,29 +353,21 @@ xmlport 50436 "Export Orders to 3PL_AU"
     var
         ItemRef: Record "Item Reference";
 
-    local procedure GetDimensionValue(DimSetID: Integer; DimCode: Code[20]): Code[20]
-var
-    DimEntry: Record "Dimension Set Entry";
-begin
-    if DimEntry.Get(DimSetID, DimCode) then
-        exit(DimEntry."Dimension Value Code");
-    exit('');
-end;
- local procedure GetWorkDescriptionText(SalesHeader: Record "Sales Header"): Text
-var
-    TypeHelper: Codeunit "Type Helper";
-    InStream: InStream;
-    WorkDescriptionText: Text;
-begin
-    SalesHeader.CalcFields("Work Description");
-    if not SalesHeader."Work Description".HasValue then
-        exit('');
+    local procedure GetWorkDescriptionText(SalesHeader: Record "Sales Header"): Text
+    var
+        TypeHelper: Codeunit "Type Helper";
+        InStream: InStream;
+        WorkDescriptionText: Text;
+    begin
+        SalesHeader.CalcFields("Work Description");
+        if not SalesHeader."Work Description".HasValue then
+            exit('');
 
-    SalesHeader."Work Description".CreateInStream(InStream);
-    WorkDescriptionText := TypeHelper.ReadAsTextWithSeparator(InStream, TypeHelper.LFSeparator());
-    
-    exit(WorkDescriptionText);
-end;
+        SalesHeader."Work Description".CreateInStream(InStream);
+        WorkDescriptionText := TypeHelper.ReadAsTextWithSeparator(InStream, TypeHelper.LFSeparator());
+        
+        exit(WorkDescriptionText);
+    end;
 
     local procedure BuildDeliveryNo(): Code[20]
     begin
@@ -395,8 +382,8 @@ end;
         CommentText: Text[250];
     begin
         CommentLine.SetRange("Table Name", Database::"Sales Header");
-        CommentLine.SetRange("Line No.", 0);
         CommentLine.SetRange("No.", OrderNo);
+        //CommentLine.SetRange("Document Type", CommentLine."Document Type"::Order);
         if CommentLine.FindSet() then
             repeat
                 CommentText := CopyStr(CommentText + CommentLine.Comment + ' ', 1, MaxStrLen(CommentText));
@@ -428,31 +415,19 @@ end;
         ItemRef.SetRange("Variant Code", SL."Variant Code");
         ItemRef.SetRange("Unit of Measure", SL."Unit of Measure Code");
         ItemRef.SetRange("Reference Type", ItemRef."Reference Type"::"Bar Code");
-        ItemRef.SetFilter("Description", 'EAN*'); //ItemRef."Reference Type"::"Bar Code");
-
+        ItemRef.SetFilter("Reference No.", '<>%1', '');
         if ItemRef.FindFirst() then
             exit(ItemRef."Reference No.");
 
         exit('');
     end;
+    
     local procedure GetGTIN2(SL: Record "Sales Line"): Code[30]
-var
+    var
         Itm: Record Item;
     begin
-        if Itm.Get(SL."No.") then
-            if Itm."GTIN" <> '' then
-                exit(Itm."GTIN");
-
-        ItemRef.Reset();
-        ItemRef.SetRange("Item No.", SL."No.");
-        ItemRef.SetRange("Variant Code", SL."Variant Code");
-        ItemRef.SetRange("Unit of Measure", SL."Unit of Measure Code");
-        ItemRef.SetRange("Reference Type", ItemRef."Reference Type"::"Bar Code");
-        ItemRef.SetFilter("Description", 'UPC*'); //ItemRef."Reference Type"::"Bar Code");
-
-        if ItemRef.FindFirst() then
-            exit(ItemRef."Reference No.");
-
+        // For GTIN2, you might want to use a different logic
+        // For now, return empty or same as GTIN
         exit('');
     end;
 }

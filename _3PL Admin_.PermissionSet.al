@@ -19,6 +19,7 @@ permissionset 50400 "3PL Admin"
         TableData "3PL Archive"                   = RIMD,   // ArchiveLog() inserts
         TableData "3PL Integration Log"           = RIMD,
         TableData "String List Buffer"            = RIMD,
+        TableData "3PL Prep Code Setup"         = RIMD,
 
         // ===== Codeunits (execute) =====
         Codeunit "3PL Order SharePoint Mgmt"      = X,      // 50400 – exports/imports/process-all
