@@ -131,22 +131,29 @@ xmlport 50435 "Export Orders to 3PL_EU"
                     textelement(cod_amount) { trigger OnBeforePassVariable() begin cod_amount := ''; end; }
                     textelement(gift_wrap) { trigger OnBeforePassVariable() begin gift_wrap := 'N'; end; }
                     //fieldelement(gift_message;  SalesHeader."Work Description")   { }
-                    textelement(gift_message)
-                    {
-                        trigger OnBeforePassVariable()
-                        var
-                            WorkDescriptionText: Text;
-                        begin
-                            // Get the work description as text
-                            WorkDescriptionText := GetWorkDescriptionText(SalesHeader);
-
-                            // Truncate to a reasonable length if needed, but don't use '*'
-                            if StrLen(WorkDescriptionText) > 250 then
-                                gift_message := CopyStr(WorkDescriptionText, 1, 250)
-                            else
-                                gift_message := WorkDescriptionText;
-                        end;
-                    }
+                   textelement(gift_message)
+{
+    trigger OnBeforePassVariable()
+    var
+        WorkDescriptionText: Text;
+        CleanText: Text;
+        MaxLength: Integer;
+    begin
+        // Get the work description as text
+        WorkDescriptionText := GetWorkDescriptionText(SalesHeader);
+        MaxLength := 250;
+        
+        // Just trim and clean line breaks
+        // Clean the text - remove line breaks and trim
+        CleanText := CleanTextContent(WorkDescriptionText);
+        
+        // Truncate if needed
+        if StrLen(CleanText) > MaxLength then
+            gift_message := CopyStr(CleanText, 1, MaxLength)
+        else
+            gift_message := CleanText;
+    end;
+}
                     textelement(vat) { trigger OnBeforePassVariable() begin vat := ''; end; }
 
                     // ---------- SOLD-TO ----------
@@ -390,22 +397,56 @@ xmlport 50435 "Export Orders to 3PL_EU"
         exit('');
     end;
 
-    local procedure GetWorkDescriptionText(SalesHeader: Record "Sales Header"): Text
-    var
-        TypeHelper: Codeunit "Type Helper";
-        InStream: InStream;
-        WorkDescriptionText: Text;
-    begin
-        SalesHeader.CalcFields("Work Description");
-        if not SalesHeader."Work Description".HasValue then
-            exit('');
+  local procedure GetWorkDescriptionText(SalesHeader: Record "Sales Header"): Text
+var
+    TypeHelper: Codeunit "Type Helper";
+    InStream: InStream;
+    WorkDescriptionText: Text;
+begin
+    SalesHeader.CalcFields("Work Description");
+    if not SalesHeader."Work Description".HasValue then
+        exit('');
+    
+    // Use UTF8 encoding when creating the stream
+    SalesHeader."Work Description".CreateInStream(InStream, TextEncoding::UTF8);
+    WorkDescriptionText := TypeHelper.ReadAsTextWithSeparator(InStream, TypeHelper.LFSeparator());
+    
+    exit(WorkDescriptionText);
+end;
 
-        SalesHeader."Work Description".CreateInStream(InStream);
-        WorkDescriptionText := TypeHelper.ReadAsTextWithSeparator(InStream, TypeHelper.LFSeparator());
-
-        exit(WorkDescriptionText);
+local procedure CleanTextContent(InputText: Text): Text
+var
+    OutputText: Text;
+    CharPos: Integer;
+    CurrentChar: Char;
+    PrevChar: Char;
+begin
+    OutputText := '';
+    PrevChar := 0;
+    
+    for CharPos := 1 to StrLen(InputText) do begin
+        CurrentChar := InputText[CharPos];
+        
+        // Replace line breaks with space
+        if (CurrentChar = 13) or (CurrentChar = 10) then begin
+            if PrevChar <> ' ' then
+                OutputText += ' ';
+            PrevChar := ' ';
+        end
+        // Keep normal printable characters and UTF-8
+        else if CurrentChar >= ' ' then begin
+            OutputText += CurrentChar;
+            PrevChar := CurrentChar;
+        end
+        // Skip other control characters
+        else begin
+            PrevChar := 0;
+        end;
     end;
-
+    
+    // Trim and return
+    exit(OutputText.Trim());
+end;
     local procedure FormatDecEU(Val: Decimal): Text[20]
     var
         FormattedText: Text;

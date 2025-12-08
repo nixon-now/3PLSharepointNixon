@@ -2,7 +2,7 @@
   "id": "9b5b312c-0c2e-463b-9be7-b727e2c8e504",
   "name": "3PL_SharePoint_Nixon",
   "publisher": "SHN",
-  "version": "1.0.6.0",
+  "version": "1.0.6.2",
   "runtime": "15.0",
   "target": "Cloud",
   "application": "26.0.0.0",
@@ -17,13 +17,7 @@
      "NoImplicitWith"
   ],
    "applicationInsightsConnectionString": "InstrumentationKey=99dd9b13-cf7b-4427-ad22-59eae4f9737a;IngestionEndpoint=https://westus2-2.in.applicationinsights.azure.com/;LiveEndpoint=https://westus2.livediagnostics.monitor.azure.com/;ApplicationId=e8deb874-7bc4-45e0-924b-c9ac340ef1b8",
-  "dependencies": [
-   { "id": "bc03edc7-50f7-4278-9146-ffa2d1e1a7a9",
-  "name": "NixonProd",
-  "publisher": "NixonInc_SHN",
-  "version": "1.0.0.44"}
   
-  ],
   "idRanges": [
     {
       "from": 50100,

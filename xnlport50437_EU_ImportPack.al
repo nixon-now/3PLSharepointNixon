@@ -169,6 +169,7 @@ xmlport 50437 "Import Pack Confirmation_EU"
                     // ✅ Mark Sales Header as having imported pick confirmation
                     SalesHeader.Validate("Imported Pick Confirmation", true);
                     SalesHeader.Validate("Imported Pick Conf. Date", TODAY);
+                    SalesHeader."Posting Date" := WorkDate();
                     SalesHeader.Modify();
                     // Decide whether to auto-release (optional).
                     // Here we conservatively release only if every Item line has >0 Qty. to Ship.

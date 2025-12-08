@@ -116,6 +116,7 @@ xmlport 50441 "Import Shipped Confirmation_EU"
            // ✅ Mark Sales Header as having imported pick confirmation
                     SalesHeader.Validate("Imported Shipped Confirmation", true);
                     SalesHeader.Validate("Imported Shipped Conf. Date", TODAY);
+                    SalesHeader."Posting Date" := WorkDate();
                     
         SalesHeader.Modify();
     end;

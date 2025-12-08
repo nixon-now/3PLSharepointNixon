@@ -101,6 +101,7 @@ xmlport 50432 "Import Pick Confirmation"
                                 // ✅ Mark Sales Header as having imported pick confirmation
                                 SalesHeader.Validate("Imported Pick Confirmation", true);
                                 SalesHeader.Validate("Imported Pick Conf. Date", TODAY);
+                                SalesHeader."Posting Date" := WorkDate();
                                 SalesHeader.Modify();
                             end else
                             CurrXmlPort.Skip(); // discard temp line buffer

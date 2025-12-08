@@ -3,7 +3,7 @@
   "id": "9b5b312c-0c2e-463b-9be7-b727e2c8e504",
     "name": "3PL_SharePoint_Nixon",
     "publisher": "SHN",
-  "version": "1.0.4.0",
+  "version": "1.0.6.2",
   "runtime": "15.0",
   "target": "Cloud",
   "application": "26.2.34746.35601",

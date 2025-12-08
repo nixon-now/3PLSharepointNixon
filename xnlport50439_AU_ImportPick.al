@@ -191,6 +191,7 @@ xmlport 50439 "Import Pick Confirmation_AU"
                         // ✅ Mark Sales Header as having imported pick confirmation
                     SalesHeader.Validate("Imported Pick Confirmation", true);
                     SalesHeader.Validate("Imported Pick Conf. Date", TODAY);
+                    SalesHeader."Posting Date" := WorkDate();
                     SalesHeader.Modify();
 
                     // Release if every Item line on the order now has Qty. to Ship > 0
