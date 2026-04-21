@@ -113,7 +113,32 @@ tableextension 50450 "Sales Header 3PL" extends "Sales Header"
             Caption = '3PL Prep Description';
             Editable = false;
         }
-    
+        field(50471; "3PL SRO Exported"; Boolean)
+        {
+            DataClassification = CustomerContent;
+            Caption = '3PL Return Order Exported';
+        }
+        field(50472; "3PL SRO Export Date"; Date)
+        {
+            DataClassification = CustomerContent;
+            Caption = '3PL Return Order Export Date';
+        }
+        field(50473; "Imported SRO Confirmation"; Boolean)
+        {
+            DataClassification = CustomerContent;
+            Caption = 'Imported Return Receipt Confirmation';
+        }
+        field(50474; "Imported SRO Conf. Date"; Date)
+        {
+            DataClassification = CustomerContent;
+            Caption = 'Imported Return Receipt Conf. Date';
+        }
+        field(50475; "3PL SRO Reception No."; Code[30])
+        {
+            DataClassification = CustomerContent;
+            Caption = '3PL Return Reception No.';
+        }
+
     }
 
     trigger OnAfterInsert()
@@ -126,6 +151,11 @@ tableextension 50450 "Sales Header 3PL" extends "Sales Header"
         "3PL Import Date" := 0D;
         "Imported Pick Conf. Date" := 0D;
         "Imported Shipped Conf. Date" := 0D;
+        "3PL SRO Exported" := false;
+        "3PL SRO Export Date" := 0D;
+        "Imported SRO Confirmation" := false;
+        "Imported SRO Conf. Date" := 0D;
+        "3PL SRO Reception No." := '';
     end;
 
     trigger OnAfterDelete()
@@ -139,6 +169,11 @@ tableextension 50450 "Sales Header 3PL" extends "Sales Header"
         "3PL Import Date" := 0D;
         "Imported Pick Conf. Date" := 0D;
         "Imported Shipped Conf. Date" := 0D;
+        "3PL SRO Exported" := false;
+        "3PL SRO Export Date" := 0D;
+        "Imported SRO Confirmation" := false;
+        "Imported SRO Conf. Date" := 0D;
+        "3PL SRO Reception No." := '';
     end;
 
     procedure Reset3PLFields()
@@ -152,6 +187,11 @@ tableextension 50450 "Sales Header 3PL" extends "Sales Header"
         "3PL Import Date" := 0D;
         "Imported Pick Conf. Date" := 0D;
         "Imported Shipped Conf. Date" := 0D;
+        "3PL SRO Exported" := false;
+        "3PL SRO Export Date" := 0D;
+        "Imported SRO Confirmation" := false;
+        "Imported SRO Conf. Date" := 0D;
+        "3PL SRO Reception No." := '';
         Modify();
     end;
 

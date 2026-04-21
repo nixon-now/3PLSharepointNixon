@@ -37,6 +37,8 @@ permissionset 50400 "3PL Admin"
         xmlport "Export Orders to 3PL_AU" = X,
         xmlport "Export Orders to 3PL" = X,
         xmlport "Export COD Total to 3PL" = X,
+        xmlport "Export SRO to 3PL_EU" = X,                  // 50438
+        xmlport "Import SRO Confirmation_EU" = X,            // 50442
         // ===== Pages for ops visibility (no setup edits) =====
         Page     "3PL Archive List"               = X,
         Page     "3PL Archive Card"               = X;

@@ -22,5 +22,15 @@ tableextension 50409 "3PL Setup Ext" extends "SharePoint Setup"
             Caption = 'Import Ship XMLport ID';
             ToolTip = 'Object ID used for importing ship confirmations.';
         }
+        field(50004; "Export SRO Xmlport ID"; Integer)
+        {
+            Caption = 'Export SRO XMLport ID';
+            ToolTip = 'Object ID used for exporting sales return orders to 3PL.';
+        }
+        field(50005; "Import SRO Xmlport ID"; Integer)
+        {
+            Caption = 'Import SRO XMLport ID';
+            ToolTip = 'Object ID used for importing return receipt confirmations from 3PL.';
+        }
     }
 }

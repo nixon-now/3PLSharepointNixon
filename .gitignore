@@ -1,6 +1,7 @@
 # Ignore compiled AL packages and output builds
 *.app
 .alpackages/
+.snapshots
 .vscode/.alcache/
 .output/
 bin/
@@ -13,3 +14,10 @@ obj/
 *.rar
 *.bak
 *.tmp
+
+#3PL Docs
+NAV Objects
+EU SRO Specs and Sample Files
+3PL Server Side Powershell Scripts
+settings.local.json
+claude.md

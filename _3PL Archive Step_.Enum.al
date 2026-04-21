@@ -18,4 +18,12 @@ enum 50401 "3PL Archive Step"
     {
     Caption = 'Export COD Info';
     }
+    value(4; "ExportReturnOrder")
+    {
+    Caption = 'Export Sales Return Order';
+    }
+    value(5; "ImportReturnConfirmation")
+    {
+    Caption = 'Import Return Receipt Confirmation';
+    }
 }
