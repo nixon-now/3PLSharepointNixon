@@ -195,6 +195,65 @@ page 50497 "SharePoint Setup"
                             Error('Connection failed. Check your settings and see error: %1', GraphConnector.GetLastError());
                     end;
                 }
+
+                action("Test SRO Export")
+                {
+                    Caption = 'Test SRO Export';
+                    ApplicationArea = All;
+                    Image = Export;
+                    ToolTip = 'Generate the SRO export XML for a chosen Return Order and download it locally instead of uploading to SharePoint. Status fields and archive log are still updated, so the order will be marked as exported.';
+
+                    trigger OnAction()
+                    var
+                        SharepointMgmt: Codeunit "3PL Order SharePoint Mgmt";
+                        SalesHeader: Record "Sales Header";
+                        SalesReturnOrders: Page "Sales Return Order List";
+                        TempBlob: Codeunit "Temp Blob";
+                        InS: InStream;
+                        FileName: Text;
+                    begin
+                        SalesHeader.SetRange("Document Type", SalesHeader."Document Type"::"Return Order");
+                        SalesReturnOrders.SetTableView(SalesHeader);
+                        SalesReturnOrders.LookupMode(true);
+                        if SalesReturnOrders.RunModal() <> Action::LookupOK then
+                            exit;
+                        SalesReturnOrders.GetRecord(SalesHeader);
+
+                        SharepointMgmt.ExportSROToSharePoint(SalesHeader, true, TempBlob);
+
+                        TempBlob.CreateInStream(InS);
+                        FileName := SalesHeader."No." + '_return.xml';
+                        DownloadFromStream(InS, 'Save SRO Export', '', 'XML files (*.xml)|*.xml', FileName);
+                    end;
+                }
+
+                action("Test SRO Import")
+                {
+                    Caption = 'Test SRO Import';
+                    ApplicationArea = All;
+                    Image = Import;
+                    ToolTip = 'Select a local SRO confirmation XML file and run it through the standard import flow. Status fields and archive log are updated; SharePoint download and rename are skipped.';
+
+                    trigger OnAction()
+                    var
+                        SharepointMgmt: Codeunit "3PL Order SharePoint Mgmt";
+                        TempBlob: Codeunit "Temp Blob";
+                        OutS: OutStream;
+                        UploadedInS: InStream;
+                        ClientFileName: Text;
+                    begin
+                        if not UploadIntoStream('Select SRO Confirmation XML', '', 'XML files (*.xml)|*.xml', ClientFileName, UploadedInS) then
+                            exit;
+
+                        TempBlob.CreateOutStream(OutS);
+                        CopyStream(OutS, UploadedInS);
+
+                        if SharepointMgmt.ImportSROFromStream(TempBlob, ClientFileName) then
+                            Message('Test SRO import succeeded for %1.', ClientFileName)
+                        else
+                            Message('Test SRO import failed for %1. See archive log for details.', ClientFileName);
+                    end;
+                }
             }
 
             group(Logs)

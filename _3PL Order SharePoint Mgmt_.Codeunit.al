@@ -403,6 +403,7 @@ end;
         SROCount: Integer;
         OtherCount: Integer;
         Msg: Text;
+        DummyBlob: Codeunit "Temp Blob";
     begin
         if not CheckSetup() then exit;
         if Setup."SharePoint Import Folder" = '' then begin
@@ -430,7 +431,7 @@ end;
                     end;
                 IsSROFile(FileName):
                     begin
-                        TryImportSROConfirmation(FileName);
+                        TryImportSROConfirmation(FileName, false, DummyBlob);
                         SROCount += 1;
                     end;
                 else begin
@@ -1589,9 +1590,8 @@ end;
         exit(SalesHeader."3PL SRO Exported");
     end;
 
-    procedure ExportSROToSharePoint(var InSalesHeader: Record "Sales Header")
+    procedure ExportSROToSharePoint(var InSalesHeader: Record "Sales Header"; SkipSharePointUpload: Boolean; var OutBlob: Codeunit "Temp Blob")
     var
-        TempBlob: Codeunit "Temp Blob";
         Err: Text;
     begin
         if not CheckSetup() then exit;
@@ -1603,9 +1603,9 @@ end;
             exit;
         end;
 
-        if TryExportSRO(InSalesHeader, TempBlob, Err) then begin
+        if TryExportSRO(InSalesHeader, OutBlob, Err, SkipSharePointUpload) then begin
             LogSROExportSuccess(InSalesHeader."No.");
-            if GuiAllowed then
+            if GuiAllowed and not SkipSharePointUpload then
                 Message('Return Order %1 (External Doc. No. %2) has been successfully exported to SharePoint.',
                     InSalesHeader."No.", InSalesHeader."External Document No.");
         end else begin
@@ -1640,7 +1640,7 @@ end;
 
         if SalesHeader.FindSet() then
             repeat
-                if TryExportSRO(SalesHeader, TempBlob, Err) then begin
+                if TryExportSRO(SalesHeader, TempBlob, Err, false) then begin
                     SuccessCount += 1;
                     LogSROExportSuccess(SalesHeader."No.");
                 end else begin
@@ -1684,7 +1684,7 @@ end;
                     Session.LogMessage('3PL-RECORD-NOTFOUND', 'Return Order no longer exists', Verbosity::Warning, DataClassification::SystemMetadata, TelemetryScope::ExtensionPublisher, Dims);
                     continue;
                 end;
-                if TryExportSRO(SalesHeaderToExport, TempBlob, Err) then begin
+                if TryExportSRO(SalesHeaderToExport, TempBlob, Err, false) then begin
                     SuccessCount += 1;
                     LogSROExportSuccess(SalesHeaderToExport."No.");
                 end else begin
@@ -1734,7 +1734,7 @@ end;
             Message('Export status reset for Return Order %1. It can now be exported again.', OrderNo);
     end;
 
-    local procedure TryExportSRO(var SalesHeader: Record "Sales Header"; var TempBlob: Codeunit "Temp Blob"; var Err: Text): Boolean
+    local procedure TryExportSRO(var SalesHeader: Record "Sales Header"; var TempBlob: Codeunit "Temp Blob"; var Err: Text; SkipSharePointUpload: Boolean): Boolean
     var
         OutS: OutStream;
         InS: InStream;
@@ -1764,10 +1764,12 @@ end;
             exit(false);
         end;
 
-        TempBlob.CreateInStream(InS);
-        if not Graph.UploadFile('3PL', Setup."SharePoint Export Folder", FileName, InS) then begin
-            Err := Graph.GetLastError();
-            exit(false);
+        if not SkipSharePointUpload then begin
+            TempBlob.CreateInStream(InS);
+            if not Graph.UploadFile('3PL', Setup."SharePoint Export Folder", FileName, InS) then begin
+                Err := Graph.GetLastError();
+                exit(false);
+            end;
         end;
 
         UpdateSROExportStatus(SalesHeader);
@@ -1861,6 +1863,7 @@ end;
         FileList: List of [Text];
         FileName: Text;
         CountProcessed: Integer;
+        DummyBlob: Codeunit "Temp Blob";
     begin
         if not CheckSetup() then exit(0);
 
@@ -1868,13 +1871,19 @@ end;
 
         foreach FileName in FileList do
             if IsSROFile(FileName) then begin
-                if not TryImportSROConfirmation(FileName) then
+                if not TryImportSROConfirmation(FileName, false, DummyBlob) then
                     LogFileImportFailed(FileName, 'SRO');
                 CountProcessed += 1;
             end;
 
         LogBatchProcessed('SRO', CountProcessed);
         exit(CountProcessed);
+    end;
+
+    procedure ImportSROFromStream(var UploadedBlob: Codeunit "Temp Blob"; FileNameHint: Text): Boolean
+    begin
+        if not CheckSetup() then exit(false);
+        exit(TryImportSROConfirmation(FileNameHint, true, UploadedBlob));
     end;
 
     procedure ImportSROForOrder(ReturnOrderNo: Code[20]): Boolean
@@ -1886,33 +1895,43 @@ end;
         exit(ImportSROConfirmationFromSharePoint(SROFileName));
     end;
 
-    local procedure TryImportSROConfirmation(FileName: Text): Boolean
+    local procedure TryImportSROConfirmation(FileName: Text; UseProvidedBlob: Boolean; var ProvidedBlob: Codeunit "Temp Blob"): Boolean
     var
         Success: Boolean;
         ErrorMessage: Text;
         NewFileName: Text;
         OrderNo: Code[20];
+        InS: InStream;
     begin
         if not Setup.Get('3PL') then
             exit(false);
 
         ClearLastError();
-        Success := ImportSROConfirmationFromSharePoint_Try(FileName);
+        if UseProvidedBlob then begin
+            ProvidedBlob.CreateInStream(InS, TextEncoding::UTF8);
+            Success := RunXmlPortImport_Try(Setup."Import SRO Xmlport ID", InS);
+        end else
+            Success := ImportSROConfirmationFromSharePoint_Try(FileName);
+
         if not Success then
             ErrorMessage := GetLastErrorText();
 
-        if Success then
+        if Success and not UseProvidedBlob then
             if ExtractOrderNoFromFileName(FileName, OrderNo) then
                 MarkSROImported(OrderNo);
 
-        if Success then
-            NewFileName := BuildRenamedFileName(FileName, '_imported')
-        else
-            NewFileName := BuildRenamedFileName(FileName, '_error');
+        if UseProvidedBlob then
+            NewFileName := FileName
+        else begin
+            if Success then
+                NewFileName := BuildRenamedFileName(FileName, '_imported')
+            else
+                NewFileName := BuildRenamedFileName(FileName, '_error');
 
-        if NewFileName <> FileName then
-            if not RenameFile('3PL', Setup."SharePoint Import Folder", FileName, NewFileName) then
-                LogMoveFailure(FileName, Graph.GetLastError());
+            if NewFileName <> FileName then
+                if not RenameFile('3PL', Setup."SharePoint Import Folder", FileName, NewFileName) then
+                    LogMoveFailure(FileName, Graph.GetLastError());
+        end;
 
         if Success then
             LogFileImported(FileName, NewFileName, 'SRO')
