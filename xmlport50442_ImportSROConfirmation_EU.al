@@ -69,6 +69,7 @@ xmlport 50442 "Import SRO Confirmation_EU"
                     // <reason_code> — optional header-level reason code override
                     textelement(reason_code)
                     {
+                        MinOccurs = Zero;
                         trigger OnAfterAssignVariable()
                         var
                             ReasonCodeRec: Record "Reason Code";
