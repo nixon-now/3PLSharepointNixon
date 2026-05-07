@@ -18,7 +18,6 @@ xmlport 50441 "Import Shipped Confirmation_EU"
                 XmlName = 'order';
                 UseTemporary = true;
 
-                // 👇 NEW: accept optional no="…" attribute on <order>
                 textattribute(no)
                 {
                    // MinOccurs = Zero;
@@ -113,11 +112,9 @@ xmlport 50441 "Import Shipped Confirmation_EU"
             SalesHeader."Shipping Agent Code" := ShipAgentCode;
         if ShipServiceCode <> '' then
             SalesHeader."Shipping Agent Service Code" := ShipServiceCode;
-           // ✅ Mark Sales Header as having imported pick confirmation
-                    SalesHeader.Validate("Imported Shipped Confirmation", true);
-                    SalesHeader.Validate("Imported Shipped Conf. Date", TODAY);
-                    SalesHeader."Posting Date" := WorkDate();
-                    
+        SalesHeader.Validate("Imported Shipped Confirmation", true);
+        SalesHeader.Validate("Imported Shipped Conf. Date", TODAY);
+        SalesHeader."Posting Date" := WorkDate();
         SalesHeader.Modify();
     end;
 }
