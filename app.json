@@ -18,6 +18,14 @@
   ],
    "applicationInsightsConnectionString": "InstrumentationKey=99dd9b13-cf7b-4427-ad22-59eae4f9737a;IngestionEndpoint=https://westus2-2.in.applicationinsights.azure.com/;LiveEndpoint=https://westus2.livediagnostics.monitor.azure.com/;ApplicationId=e8deb874-7bc4-45e0-924b-c9ac340ef1b8",
   
+  "dependencies": [
+    {
+      "id": "ec255f57-31d0-4ca2-b751-f2fa7c745abb",
+      "name": "Shopify Connector",
+      "publisher": "Microsoft",
+      "version": "27.5.46862.47835"
+    }
+  ],
   "idRanges": [
     {
       "from": 50100,
