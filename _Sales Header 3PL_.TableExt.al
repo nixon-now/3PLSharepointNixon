@@ -2,6 +2,30 @@ tableextension 50450 "Sales Header 3PL" extends "Sales Header"
 {
     fields
     {
+        modify("Sell-to Customer No.")
+        {
+            trigger OnAfterValidate()
+            var
+                Customer: Record Customer;
+                DefaultCode: Code[20];
+            begin
+                if Rec.IsTemporary() then
+                    exit;
+                if Rec."Sell-to Customer No." = '' then
+                    exit;
+                if not Customer.Get(Rec."Sell-to Customer No.") then
+                    exit;
+
+                if Customer."3PL Prep Code" <> '' then begin
+                    Rec.Validate("3PL Prep Code", Customer."3PL Prep Code");
+                    exit;
+                end;
+
+                DefaultCode := Rec.GetDefault3PLPrepCode();
+                if DefaultCode <> '' then
+                    Rec.Validate("3PL Prep Code", DefaultCode);
+            end;
+        }
         field(50450; "3PL Imported"; Boolean)
         {
             DataClassification = CustomerContent;
@@ -11,6 +35,9 @@ tableextension 50450 "Sales Header 3PL" extends "Sales Header"
         {
             DataClassification = CustomerContent;
             Caption = '3PL Tracking Number';
+            ObsoleteState = Pending;
+            ObsoleteReason = 'Use standard "Package Tracking No." instead.';
+            ObsoleteTag = '2026-05';
         }
         field(50452; "3PL Export Date"; Date)
         {
@@ -66,20 +93,18 @@ tableextension 50450 "Sales Header 3PL" extends "Sales Header"
         {
             DataClassification = CustomerContent;
             Caption = '3PL Preparation Code';
-            //TableRelation = "Dimension Value".Code where("Dimension Code" = field("3PL Preparation Code"));
-
-            trigger OnValidate()
-            begin
-                //Update3PLPrepCodeDimension();
-            end;
+            ObsoleteState = Pending;
+            ObsoleteReason = 'Replaced by "3PL Prep Code" (field 50469).';
+            ObsoleteTag = '2026-05';
         }
-
-        // Helper field to store the dimension code
         field(50467; "3PL Preparation Dimension Code"; Code[20])
         {
             DataClassification = CustomerContent;
-            Caption = '3PL Preparation Dimension Code"';
+            Caption = '3PL Preparation Dimension Code';
             TableRelation = Dimension;
+            ObsoleteState = Pending;
+            ObsoleteReason = 'Replaced by "3PL Prep Code" (field 50469).';
+            ObsoleteTag = '2026-05';
         }
         field(50464; "3PL Priority"; Integer)
         {
@@ -96,12 +121,12 @@ tableextension 50450 "Sales Header 3PL" extends "Sales Header"
             Caption = 'COD Amount';
             DataClassification = CustomerContent;
         }
-         field(50469; "3PL Prep Code"; Code[20])
+        field(50469; "3PL Prep Code"; Code[20])
         {
             DataClassification = CustomerContent;
             Caption = '3PL Prep Code';
             TableRelation = "3PL Prep Code Setup".Code where(Blocked = const(false));
-            
+
             trigger OnValidate()
             begin
                 Update3PLPrepCodeDescription();
@@ -113,10 +138,12 @@ tableextension 50450 "Sales Header 3PL" extends "Sales Header"
             Caption = '3PL Prep Description';
             Editable = false;
         }
-    
+
     }
 
     trigger OnAfterInsert()
+    var
+        DefaultPrepCode: Code[20];
     begin
         "3PL Imported" := false;
         "3PL Exported" := false;
@@ -126,6 +153,12 @@ tableextension 50450 "Sales Header 3PL" extends "Sales Header"
         "3PL Import Date" := 0D;
         "Imported Pick Conf. Date" := 0D;
         "Imported Shipped Conf. Date" := 0D;
+
+        if "3PL Prep Code" = '' then begin
+            DefaultPrepCode := GetDefault3PLPrepCode();
+            if DefaultPrepCode <> '' then
+                Validate("3PL Prep Code", DefaultPrepCode);
+        end;
     end;
 
     trigger OnAfterDelete()
@@ -134,7 +167,6 @@ tableextension 50450 "Sales Header 3PL" extends "Sales Header"
         "3PL Exported" := false;
         "Imported Pick Confirmation" := false;
         "Imported Shipped Confirmation" := false;
-        "3PL Tracking No." := '';
         "3PL Export Date" := 0D;
         "3PL Import Date" := 0D;
         "Imported Pick Conf. Date" := 0D;
@@ -147,7 +179,6 @@ tableextension 50450 "Sales Header 3PL" extends "Sales Header"
         "3PL Exported" := false;
         "Imported Pick Confirmation" := false;
         "Imported Shipped Confirmation" := false;
-        "3PL Tracking No." := '';
         "3PL Export Date" := 0D;
         "3PL Import Date" := 0D;
         "Imported Pick Conf. Date" := 0D;
@@ -155,7 +186,7 @@ tableextension 50450 "Sales Header 3PL" extends "Sales Header"
         Modify();
     end;
 
-      local procedure Update3PLPrepCodeDescription()
+    local procedure Update3PLPrepCodeDescription()
     var
         PrepCodeSetup: Record "3PL Prep Code Setup";
     begin
@@ -177,7 +208,7 @@ tableextension 50450 "Sales Header 3PL" extends "Sales Header"
         PrepCodeSetup.SetRange("Default Code", true);
         if PrepCodeSetup.FindFirst() then
             exit(PrepCodeSetup.Code);
-        
+
         exit('');
     end;
 }

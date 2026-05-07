@@ -97,8 +97,7 @@ xmlport 50432 "Import Pick Confirmation"
                         begin
                             EnsureCurrentOrderPrepared();
                             if CurrentOrderExists then begin
-                                UpdateQtyUsingItemReferencePreferred(); // FIXED: Call without parameters
-                                // ✅ Mark Sales Header as having imported pick confirmation
+                                UpdateQtyUsingItemReferencePreferred();
                                 SalesHeader.Validate("Imported Pick Confirmation", true);
                                 SalesHeader.Validate("Imported Pick Conf. Date", TODAY);
                                 SalesHeader."Posting Date" := WorkDate();
