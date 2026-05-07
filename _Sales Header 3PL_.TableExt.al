@@ -138,6 +138,11 @@ tableextension 50450 "Sales Header 3PL" extends "Sales Header"
             Caption = '3PL Prep Description';
             Editable = false;
         }
+        field(50476; "3PL Skipped"; Boolean)
+        {
+            DataClassification = CustomerContent;
+            Caption = '3PL Skipped';
+        }
 
     }
 
