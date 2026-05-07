@@ -18,6 +18,11 @@ pageextension 50496 SalesOrderCard3PLExt extends "Sales Order"
                     ApplicationArea = All;
                     Caption = '3PL Order Exported';
                 }
+                field("3PL Skipped"; Rec."3PL Skipped")
+                {
+                    ApplicationArea = All;
+                    Caption = '3PL Skipped';
+                }
                  field("3PL Export Date"; Rec."3PL Export Date")
                 {
                     ApplicationArea = All;
