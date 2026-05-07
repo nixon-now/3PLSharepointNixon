@@ -1,3 +1,4 @@
+
 codeunit 50400 "3PL Order SharePoint Mgmt"
 {
     SingleInstance = false;
@@ -17,13 +18,16 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
         if not SalesHeader.Get(SalesHeader."Document Type"::Order, OrderNo) then
             exit(false);
 
+        if SalesHeader."3PL Skipped" then
+            exit(false);
+
         if IsCOD then
             exit(SalesHeader."3PL COD Exported")
         else
             exit(SalesHeader."3PL Order Exported");
     end;
 
-    procedure ExportSelectedOrdersByRecordId(SelectedRecordRefs: List of[RecordID])
+    procedure ExportSelectedOrdersByRecordId(SelectedRecordRefs: List of [RecordID])
     var
         SalesHeader: Record "Sales Header";
         TempBlob: Codeunit "Temp Blob";
@@ -191,6 +195,7 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
             SalesHeader.SetRange("Location Code", Setup."Location Code");
 
         SalesHeader.SetRange("3PL Order Exported", false);
+        SalesHeader.SetRange("3PL Skipped", false);
 
         if SalesHeader.FindSet() then
             repeat
@@ -211,61 +216,62 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
     end;
 
 
-procedure ResetExportStatus(OrderNo: Code[20]; ResetCOD: Boolean; ResetOrder: Boolean)
-var
-    SalesHeader: Record "Sales Header";
-    ThreePLArchive: Record "3PL Archive";
-    Dims: Dictionary of [Text, Text];
-begin
-    // 1. Reset Sales Header flags
-    if not SalesHeader.Get(SalesHeader."Document Type"::Order, OrderNo) then begin
-        Clear(Dims);
-        Dims.Add('orderNo', OrderNo);
-        Session.LogMessage('3PL-RESET-NOTFOUND', 'Order not found for reset', 
-            Verbosity::Warning, DataClassification::SystemMetadata, 
-            TelemetryScope::ExtensionPublisher, Dims);
-        exit;
+    procedure ResetExportStatus(OrderNo: Code[20]; ResetCOD: Boolean; ResetOrder: Boolean)
+    var
+        SalesHeader: Record "Sales Header";
+        ThreePLArchive: Record "3PL Archive";
+        Dims: Dictionary of [Text, Text];
+    begin
+        // 1. Reset Sales Header flags
+        if not SalesHeader.Get(SalesHeader."Document Type"::Order, OrderNo) then begin
+            Clear(Dims);
+            Dims.Add('orderNo', OrderNo);
+            Session.LogMessage('3PL-RESET-NOTFOUND', 'Order not found for reset',
+                Verbosity::Warning, DataClassification::SystemMetadata,
+                TelemetryScope::ExtensionPublisher, Dims);
+            exit;
+        end;
+
+        if ResetCOD then begin
+            SalesHeader."3PL COD Exported" := false;
+            SalesHeader."3PL Export Date" := 0D;
+
+            // Delete COD archive entries
+            ThreePLArchive.SetRange("Document No.", OrderNo);
+            ThreePLArchive.SetRange("Direction", ThreePLArchive."Direction"::Export);
+            ThreePLArchive.SetRange("Step", ThreePLArchive."Step"::ExportCOD);
+            ThreePLArchive.DeleteAll();
+        end;
+
+        if ResetOrder then begin
+            SalesHeader."3PL Order Exported" := false;
+            SalesHeader."3PL Exported" := false;
+            SalesHeader."3PL Export Date" := 0D;
+
+            // Delete regular order archive entries
+            ThreePLArchive.SetRange("Document No.", OrderNo);
+            ThreePLArchive.SetRange("Direction", ThreePLArchive."Direction"::Export);
+            ThreePLArchive.SetRange("Step", ThreePLArchive."Step"::ExportOrder);
+            ThreePLArchive.DeleteAll();
+        end;
+
+        if (ResetCOD or ResetOrder) then begin
+            SalesHeader.Modify(true);
+
+            // Log the reset
+            Clear(Dims);
+            Dims.Add('orderNo', OrderNo);
+            if ResetCOD then Dims.Add('resetCOD', 'true');
+            if ResetOrder then Dims.Add('resetOrder', 'true');
+            Session.LogMessage('3PL-RESET-STATUS', 'Export status reset for order',
+                Verbosity::Normal, DataClassification::SystemMetadata,
+                TelemetryScope::ExtensionPublisher, Dims);
+
+            if GuiAllowed then
+                Message('Export status reset for order %1. The order can now be exported again.', OrderNo);
+        end;
     end;
 
-    if ResetCOD then begin
-        SalesHeader."3PL COD Exported" := false;
-        SalesHeader."3PL Export Date" := 0D;
-        
-        // Delete COD archive entries
-        ThreePLArchive.SetRange("Document No.", OrderNo);
-        ThreePLArchive.SetRange("Direction", ThreePLArchive."Direction"::Export);
-        ThreePLArchive.SetRange("Step", ThreePLArchive."Step"::ExportCOD);
-        ThreePLArchive.DeleteAll();
-    end;
-
-    if ResetOrder then begin
-        SalesHeader."3PL Order Exported" := false;
-        SalesHeader."3PL Exported" := false;
-        SalesHeader."3PL Export Date" := 0D;
-        
-        // Delete regular order archive entries
-        ThreePLArchive.SetRange("Document No.", OrderNo);
-        ThreePLArchive.SetRange("Direction", ThreePLArchive."Direction"::Export);
-        ThreePLArchive.SetRange("Step", ThreePLArchive."Step"::ExportOrder);
-        ThreePLArchive.DeleteAll();
-    end;
-
-    if (ResetCOD or ResetOrder) then begin
-        SalesHeader.Modify(true);
-
-        // Log the reset
-        Clear(Dims);
-        Dims.Add('orderNo', OrderNo);
-        if ResetCOD then Dims.Add('resetCOD', 'true');
-        if ResetOrder then Dims.Add('resetOrder', 'true');
-        Session.LogMessage('3PL-RESET-STATUS', 'Export status reset for order', 
-            Verbosity::Normal, DataClassification::SystemMetadata, 
-            TelemetryScope::ExtensionPublisher, Dims);
-            
-        if GuiAllowed then
-            Message('Export status reset for order %1. The order can now be exported again.', OrderNo);
-    end;
-end;
     local procedure TryExportOrder(var SalesHeader: Record "Sales Header"; var TempBlob: Codeunit "Temp Blob"; SilentMode: Boolean; IsCODExport: Boolean; var Err: Text): Boolean
     var
         OutS: OutStream;
@@ -333,6 +339,7 @@ end;
 
         exit(true);
     end;
+
     procedure ImportShipConfirmationBatch(): Integer
     var
         FileList: List of [Text];
@@ -572,13 +579,34 @@ end;
             exit(false);
         end;
 
+        if not CheckShopifyOrderNotRefunded(SalesHeader, Err) then
+            exit(false);
+
+        exit(true);
+    end;
+
+    local procedure CheckShopifyOrderNotRefunded(var SalesHeader: Record "Sales Header"; var Err: Text): Boolean
+    var
+        ShopifyOrder: Record "Shpfy Order Header";
+    begin
+        ShopifyOrder.SetRange("Sales Order No.", SalesHeader."No.");
+        if not ShopifyOrder.FindFirst() then
+            exit(true);
+
+        if ShopifyOrder."Financial Status" = ShopifyOrder."Financial Status"::Refunded then begin
+            SalesHeader."3PL Skipped" := true;
+            SalesHeader.Modify(true);
+            Err := StrSubstNo('Order %1 cannot be exported: the linked Shopify order has been fully refunded.', SalesHeader."No.");
+            exit(false);
+        end;
+
         exit(true);
     end;
 
     local procedure ExtractOrderNoFromFileName(FileName: Text; var OrderNo: Code[20]): Boolean
     var
         U: Text;
-        p, i, last: Integer;
+        p, i, last : Integer;
         ch: Char;
     begin
         U := UpperCase(FileName);
@@ -649,13 +677,13 @@ end;
             ExportOrderXmlPort.SetDestination(OutS);
             ExportOrderXmlPort.Export();
         end else
-        if IsCODExport and (XmlId = XMLport::"Export COD Total to 3PL") then begin
-            ExportCODXmlPort.SetTableView(SalesHeader);
-            ExportCODXmlPort.SetDestination(OutS);
-            ExportCODXmlPort.Export();
-        end else begin
-            XMLPORT.EXPORT(XmlId, OutS, SalesHeader);
-        end;
+            if IsCODExport and (XmlId = XMLport::"Export COD Total to 3PL") then begin
+                ExportCODXmlPort.SetTableView(SalesHeader);
+                ExportCODXmlPort.SetDestination(OutS);
+                ExportCODXmlPort.Export();
+            end else begin
+                XMLPORT.EXPORT(XmlId, OutS, SalesHeader);
+            end;
 
         exit(true);
     end;
