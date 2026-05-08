@@ -89,10 +89,10 @@ xmlport 50437 "Import Pack Confirmation_EU"
                         UseTemporary = true;
 
                         // <line no="10000">
-                        textattribute(line_no) 
+                        textattribute(line_no)
                         {
                             XmlName = 'no';
-                             } // 🔧 FIX: was line_no — must be 'no' to match sample
+                        }
 
                         // <item>A045-000-00</item>
                         textelement(item)
@@ -148,7 +148,7 @@ xmlport 50437 "Import Pack Confirmation_EU"
                                         exit;
 
                                     if Evaluate(QtyPicked, qty) then
-                                        ApplyPickQuantity(QtyPicked); // 🔧 FIX: call the correct helper
+                                        ApplyPickQuantity(QtyPicked);
                                 end;
                             }
                             textelement(unit)              { }
@@ -166,7 +166,6 @@ xmlport 50437 "Import Pack Confirmation_EU"
                 begin
                     if not GotSHeader then
                         exit;
-                    // ✅ Mark Sales Header as having imported pick confirmation
                     SalesHeader.Validate("Imported Pick Confirmation", true);
                     SalesHeader.Validate("Imported Pick Conf. Date", TODAY);
                     SalesHeader."Posting Date" := WorkDate();

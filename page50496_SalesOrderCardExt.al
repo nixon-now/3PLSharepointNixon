@@ -8,10 +8,14 @@ pageextension 50496 SalesOrderCard3PLExt extends "Sales Order"
             {
                 Caption = '3PL Integration';
 
-                 field("3PL PREP CODE"; Rec."3PL PREP CODE")
+                field("3PL Prep Code"; Rec."3PL Prep Code")
                 {
                     ApplicationArea = All;
-                    Caption = '3PL PREP CODE';
+                }
+                field("3PL Prep Description"; Rec."3PL Prep Description")
+                {
+                    ApplicationArea = All;
+                    Editable = false;
                 }
                  field("3PL Exported"; Rec."3PL Exported")
                 {
@@ -38,6 +42,10 @@ pageextension 50496 SalesOrderCard3PLExt extends "Sales Order"
                 {
                     ApplicationArea = All;
                     Caption = '3PL Tracking No.';
+                    Visible = false;
+                    ObsoleteState = Pending;
+                    ObsoleteReason = 'Use standard "Package Tracking No." instead.';
+                    ObsoleteTag = '2026-05';
                 }
                
                 field("Imported Pick Confirmation"; Rec."Imported Pick Confirmation")

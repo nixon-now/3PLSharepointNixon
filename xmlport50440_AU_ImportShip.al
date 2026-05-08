@@ -128,15 +128,12 @@ xmlport 50440 "Import Shipped Confirmation_AU"
             end;
         end;
 
-        // Update order fields
-        SalesHeader."Shipping Agent Code" := XmlCourier;
-        SalesHeader."Package Tracking No." := XmlTrackingNo;
-        
-        // Additional 3PL specific field if needed
-        //if SalesHeader.FieldExist("3PL Tracking No.") then
-        SalesHeader."3PL Tracking No." := XmlTrackingNo;
+        if XmlCourier <> '' then
+            SalesHeader.Validate("Shipping Agent Code", XmlCourier);
+        if XmlTrackingNo <> '' then
+            SalesHeader.Validate("Package Tracking No.", CopyStr(XmlTrackingNo, 1, MaxStrLen(SalesHeader."Package Tracking No.")));
 
-        if not SalesHeader.Modify() then begin
+        if not SalesHeader.Modify(true) then begin
             ShipmentSkipCount += 1;
             LogError('OrderUpdateFailed', XmlOrderNo, StrSubstNo('Failed to update order %1', XmlOrderNo));
             exit;
