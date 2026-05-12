@@ -352,7 +352,7 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
 
         foreach FileName in FileList do
             if IsShipFile(FileName) then begin
-                if not TryImportShipConfirmation(FileName) then
+                if not TryImportConfirmation(FileName, "3PL Import Type"::Ship) then
                     LogFileImportFailed(FileName, 'Ship');
                 CountProcessed += 1;
             end;
@@ -362,21 +362,22 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
     end;
 
     procedure ImportPickForOrder(SalesOrderNo: Code[20]): Boolean
-    var
-        PickFileName: Text;
     begin
-        if not FirstPickFileForOrder(SalesOrderNo, PickFileName) then
-            exit(false);
-        exit(ImportPickConfirmationFromSharePoint(PickFileName));
+        exit(ImportConfirmationForOrder(SalesOrderNo, "3PL Import Type"::Pick));
     end;
 
     procedure ImportShipForOrder(SalesOrderNo: Code[20]): Boolean
-    var
-        ShipFileName: Text;
     begin
-        if not FirstShipFileForOrder(SalesOrderNo, ShipFileName) then
+        exit(ImportConfirmationForOrder(SalesOrderNo, "3PL Import Type"::Ship));
+    end;
+
+    local procedure ImportConfirmationForOrder(SalesOrderNo: Code[20]; ConfType: Enum "3PL Import Type"): Boolean
+    var
+        FileName: Text;
+    begin
+        if not FirstFileForOrder(SalesOrderNo, ConfType, FileName) then
             exit(false);
-        exit(ImportShipConfirmationFromSharePoint(ShipFileName));
+        exit(ImportConfirmationFromSharePoint(FileName, ConfType));
     end;
 
     procedure ImportPickConfirmationBatch(): Integer
@@ -391,7 +392,7 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
 
         foreach FileName in FileList do
             if IsPickFile(FileName) then begin
-                if not TryImportPickConfirmation(FileName) then
+                if not TryImportConfirmation(FileName, "3PL Import Type"::Pick) then
                     LogFileImportFailed(FileName, 'Pick');
                 CountProcessed += 1;
             end;
@@ -428,12 +429,12 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
             case true of
                 IsPickFile(FileName):
                     begin
-                        TryImportPickConfirmation(FileName);
+                        TryImportConfirmation(FileName, "3PL Import Type"::Pick);
                         PickCount += 1;
                     end;
                 IsShipFile(FileName):
                     begin
-                        TryImportShipConfirmation(FileName);
+                        TryImportConfirmation(FileName, "3PL Import Type"::Ship);
                         ShipCount += 1;
                     end;
                 IsSROFile(FileName):
@@ -469,43 +470,28 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
     end;
 
     [TryFunction]
-    local procedure ImportPickConfirmationFromSharePoint_Try(FileName: Text)
+    local procedure ImportConfirmationFromSharePoint_Try(FileName: Text; ConfType: Enum "3PL Import Type")
     begin
-        ImportPickConfirmationFromSharePoint(FileName);
+        ImportConfirmationFromSharePoint(FileName, ConfType);
     end;
 
-    [TryFunction]
-    local procedure ImportShipConfirmationFromSharePoint_Try(FileName: Text)
-    begin
-        ImportShipConfirmationFromSharePoint(FileName);
-    end;
-
-    local procedure ImportShipConfirmationFromSharePoint(FileName: Text): Boolean
+    local procedure ImportConfirmationFromSharePoint(FileName: Text; ConfType: Enum "3PL Import Type"): Boolean
     var
-        ShipXmlId: Integer;
+        XmlPortId: Integer;
     begin
         if not Setup.Get('3PL') then
             Error('3PL SharePoint setup not configured');
 
-        ShipXmlId := Setup."Import Ship XmlPort Id";
-        if ShipXmlId = 0 then
-            Error('Import Ship XMLport ID is not configured in Setup.');
+        case ConfType of
+            ConfType::Pick:
+                XmlPortId := Setup."Import Pick Xmlport ID";
+            ConfType::Ship:
+                XmlPortId := Setup."Import Ship Xmlport ID";
+        end;
+        if XmlPortId = 0 then
+            Error('Import XMLport ID for %1 is not configured in Setup.', ConfType);
 
-        exit(ImportFileWithXmlPortId(FileName, ShipXmlId));
-    end;
-
-    local procedure ImportPickConfirmationFromSharePoint(FileName: Text): Boolean
-    var
-        PickXmlId: Integer;
-    begin
-        if not Setup.Get('3PL') then
-            Error('3PL SharePoint setup not configured');
-
-        PickXmlId := Setup."Import Pick XmlPort Id";
-        if PickXmlId = 0 then
-            Error('Import Pick XMLport ID is not configured in Setup.');
-
-        exit(ImportFileWithXmlPortId(FileName, PickXmlId));
+        exit(ImportFileWithXmlPortId(FileName, XmlPortId));
     end;
 
     local procedure CheckSetup(): Boolean
@@ -603,56 +589,6 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
         exit(true);
     end;
 
-    local procedure ExtractOrderNoFromFileName(FileName: Text; var OrderNo: Code[20]): Boolean
-    var
-        U: Text;
-        p, i, last : Integer;
-        ch: Char;
-    begin
-        U := UpperCase(FileName);
-        p := StrPos(U, 'SO');
-        if p = 0 then
-            exit(false);
-
-        last := p + 1;
-        for i := p + 2 to StrLen(U) do begin
-            ch := U[i];
-            if ((ch >= '0') and (ch <= '9')) or ((ch >= 'A') and (ch <= 'Z')) then
-                last := i
-            else
-                break;
-        end;
-
-        OrderNo := CopyStr(FileName, p, last - p + 1);
-        exit(OrderNo <> '');
-    end;
-
-    local procedure MarkPickImported(OrderNo: Code[20])
-    var
-        H: Record "Sales Header";
-    begin
-        if H.Get(H."Document Type"::Order, OrderNo) then begin
-            H."Imported Pick Confirmation" := true;
-            H."Imported Pick Conf. Date" := Today;
-            H."3PL Imported" := true;
-            H."3PL Import Date" := Today;
-            H.Modify(true);
-        end;
-    end;
-
-    local procedure MarkShipImported(OrderNo: Code[20])
-    var
-        H: Record "Sales Header";
-    begin
-        if H.Get(H."Document Type"::Order, OrderNo) then begin
-            H."Imported Shipped Confirmation" := true;
-            H."Imported Shipped Conf. Date" := Today;
-            H."3PL Imported" := true;
-            H."3PL Import Date" := Today;
-            H.Modify(true);
-        end;
-    end;
-
     local procedure PrepareSingleRecordView(var SourceSalesHeader: Record "Sales Header"; var TargetSalesHeader: Record "Sales Header"; var Err: Text): Boolean
     begin
         TargetSalesHeader.Reset();
@@ -726,24 +662,26 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
         XMLPORT.IMPORT(XmlPortId, InS);
     end;
 
-    local procedure TryImportPickConfirmation(FileName: Text): Boolean
+    local procedure TryImportConfirmation(FileName: Text; ConfType: Enum "3PL Import Type"): Boolean
     var
         Success: Boolean;
         ErrorMessage: Text;
         NewFileName: Text;
-        OrderNo: Code[20];
+        LabelTxt: Text;
     begin
         if not Setup.Get('3PL') then
             exit(false);
 
+        case ConfType of
+            ConfType::Pick:
+                LabelTxt := 'Pick';
+            ConfType::Ship:
+                LabelTxt := 'Ship';
+        end;
         ClearLastError();
-        Success := ImportPickConfirmationFromSharePoint_Try(FileName);
+        Success := ImportConfirmationFromSharePoint_Try(FileName, ConfType);
         if not Success then
             ErrorMessage := GetLastErrorText();
-
-        if Success then
-            if ExtractOrderNoFromFileName(FileName, OrderNo) then
-                MarkPickImported(OrderNo);
 
         if Success then
             NewFileName := BuildRenamedFileName(FileName, '_imported')
@@ -755,9 +693,9 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
                 LogMoveFailure(FileName, Graph.GetLastError());
 
         if Success then
-            LogFileImported(FileName, NewFileName, 'Pick')
+            LogFileImported(FileName, NewFileName, LabelTxt)
         else
-            LogFileImportFailed(FileName, NewFileName, ErrorMessage, 'Pick');
+            LogFileImportFailed(FileName, NewFileName, ErrorMessage, LabelTxt);
 
         ArchiveLog(
             Success,
@@ -774,60 +712,14 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
         exit(Success);
     end;
 
-    local procedure TryImportShipConfirmation(FileName: Text): Boolean
-    var
-        Success: Boolean;
-        ErrorMessage: Text;
-        NewFileName: Text;
-        OrderNo: Code[20];
-    begin
-        if not Setup.Get('3PL') then
-            exit(false);
-        ClearLastError();
-        ImportShipConfirmationFromSharePoint_Try(FileName);
-        Success := GetLastErrorText() = '';
-
-        if Success then
-            if ExtractOrderNoFromFileName(FileName, OrderNo) then
-                MarkShipImported(OrderNo);
-
-        if not Success then
-            ErrorMessage := GetLastErrorText();
-        if Success then
-            NewFileName := BuildRenamedFileName(FileName, '_imported')
-        else
-            NewFileName := BuildRenamedFileName(FileName, '_error');
-
-        if NewFileName <> FileName then
-            if not RenameFile('3PL', Setup."SharePoint Import Folder", FileName, NewFileName) then
-                LogMoveFailure(FileName, Graph.GetLastError());
-
-        if Success then
-            LogFileImported(FileName, NewFileName, 'Ship')
-        else
-            LogFileImportFailed(FileName, NewFileName, ErrorMessage, 'Ship');
-
-        ArchiveLog(
-            Success,
-            "3PL Log Direction"::Import,
-            '',
-            '',
-            NewFileName,
-            Setup,
-            "3PL Archive Step"::ImportConfirmation,
-            ErrorMessage,
-            Setup."SharePoint Import Folder"
-        );
-
-        exit(Success);
-    end;
 
     local procedure IsPickFile(FileName: Text): Boolean
     var
         NameLower: Text;
         NameLen: Integer;
         DotXmlPos: Integer;
-        HasPrefixOk: Boolean;
+        HasGenericPrefix: Boolean;
+        HasPickPrefix: Boolean;
         Suffixes: List of [Text];
         Token: Text;
     begin
@@ -841,22 +733,36 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
         if DotXmlPos <> (NameLen - 3) then
             exit(false);
 
-        HasPrefixOk := true;
-        if Setup.Get('3PL') then
-            if Setup."Import File Prefix" <> '' then
-                HasPrefixOk := StartsWithIgnoreCase(FileName, Setup."Import File Prefix");
-
-        if not HasPrefixOk then
-            exit(false);
-
-        if Setup.Get('3PL') then
-            Suffixes := ParseSuffixTokens(Setup."Import File Suffix")
-        else
+        if not Setup.Get('3PL') then begin
             Suffixes := ParseSuffixTokens('');
+            foreach Token in Suffixes do
+                if (StrPos(NameLower, Token) > 0) and (StrPos(NameLower, Token) < DotXmlPos) then
+                    exit(true);
+            exit(false);
+        end;
 
-        foreach Token in Suffixes do
-            if (StrPos(NameLower, Token) > 0) and (StrPos(NameLower, Token) < DotXmlPos) then
+        HasGenericPrefix := true;
+        if Setup."Import File Prefix" <> '' then
+            HasGenericPrefix := StartsWithIgnoreCase(FileName, Setup."Import File Prefix");
+
+        if HasGenericPrefix then begin
+            Suffixes := ParseSuffixTokens(Setup."Import File Suffix");
+            foreach Token in Suffixes do
+                if (StrPos(NameLower, Token) > 0) and (StrPos(NameLower, Token) < DotXmlPos) then
+                    exit(true);
+        end;
+
+        HasPickPrefix := (Setup."Import Pick File Prefix" <> '') and
+                         StartsWithIgnoreCase(FileName, Setup."Import Pick File Prefix");
+
+        if HasPickPrefix then begin
+            if Setup."Import Pick File Suffix" = '' then
                 exit(true);
+            Suffixes := ParseSuffixTokens(Setup."Import Pick File Suffix");
+            foreach Token in Suffixes do
+                if (StrPos(NameLower, Token) > 0) and (StrPos(NameLower, Token) < DotXmlPos) then
+                    exit(true);
+        end;
 
         exit(false);
     end;
@@ -865,6 +771,7 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
     var
         NameLower: Text;
         HasShipKeyword: Boolean;
+        HasGenericPrefix: Boolean;
         HasShipPrefix: Boolean;
     begin
         if not EndsWithXml(FileName) then
@@ -876,10 +783,16 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
         if not Setup.Get('3PL') then
             exit(HasShipKeyword);
 
-        HasShipPrefix := (Setup."Import File Prefix" <> '') and
-                         StartsWithIgnoreCase(FileName, Setup."Import File Prefix");
+        HasGenericPrefix := (Setup."Import File Prefix" <> '') and
+                            StartsWithIgnoreCase(FileName, Setup."Import File Prefix");
 
-        exit(HasShipKeyword or HasShipPrefix);
+        if HasShipKeyword or HasGenericPrefix then
+            exit(true);
+
+        HasShipPrefix := (Setup."Import Ship File Prefix" <> '') and
+                         StartsWithIgnoreCase(FileName, Setup."Import Ship File Prefix");
+
+        exit(HasShipPrefix);
     end;
 
     local procedure TryImportPickFile(FileName: Text): Boolean
@@ -976,91 +889,33 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
         exit(true);
     end;
 
-    local procedure FirstPickFileForOrder(OrderNo: Code[20]; var MatchedName: Text): Boolean
+    local procedure FirstFileForOrder(OrderNo: Code[20]; ConfType: Enum "3PL Import Type"; var MatchedName: Text): Boolean
     var
         FileList: List of [Text];
         Name: Text;
+        OrderLower: Text;
+        IsMatch: Boolean;
     begin
         if not Setup.Get('3PL') then
             Error('3PL SharePoint setup not configured');
 
         FileList := Graph.ListFilesInFolder('3PL', Setup."SharePoint Import Folder");
-        foreach Name in FileList do
-            if MatchesPickPattern(OrderNo, Name) then begin
+        OrderLower := LowerCase(OrderNo);
+
+        foreach Name in FileList do begin
+            IsMatch := false;
+            if StrPos(LowerCase(Name), OrderLower) > 0 then
+                case ConfType of
+                    ConfType::Pick:
+                        IsMatch := IsPickFile(Name);
+                    ConfType::Ship:
+                        IsMatch := IsShipFile(Name);
+                end;
+            if IsMatch then begin
                 MatchedName := Name;
                 exit(true);
             end;
-        exit(false);
-    end;
-
-    local procedure FirstShipFileForOrder(OrderNo: Code[20]; var MatchedName: Text): Boolean
-    var
-        FileList: List of [Text];
-        Name: Text;
-    begin
-        if not Setup.Get('3PL') then
-            Error('3PL SharePoint setup not configured');
-
-        FileList := Graph.ListFilesInFolder('3PL', Setup."SharePoint Import Folder");
-        foreach Name in FileList do
-            if MatchesShipPattern(OrderNo, Name) then begin
-                MatchedName := Name;
-                exit(true);
-            end;
-        exit(false);
-    end;
-
-    local procedure MatchesPickPattern(OrderNo: Code[20]; FileName: Text): Boolean
-    var
-        NameLower: Text;
-        OrderLower: Text;
-        ExpectedPrefix: Text;
-    begin
-        if not EndsWithXml(FileName) then
-            exit(false);
-
-        NameLower := LowerCase(FileName);
-        OrderLower := LowerCase(OrderNo);
-
-        if StrPos(NameLower, OrderLower + '_pick') > 0 then
-            exit(true);
-
-        if Setup.Get('3PL') then begin
-            ExpectedPrefix := LowerCase(Setup."Import File Prefix" + OrderNo);
-            if StrPos(NameLower, ExpectedPrefix) = 1 then
-                if Setup."Import File Suffix" <> '' then
-                    exit(StrEndsWith(NameLower, LowerCase(Setup."Import File Suffix" + '.xml')))
-                else
-                    exit(true);
         end;
-
-        exit(false);
-    end;
-
-    local procedure MatchesShipPattern(OrderNo: Code[20]; FileName: Text): Boolean
-    var
-        NameLower: Text;
-        OrderLower: Text;
-        ExpectedPrefix: Text;
-    begin
-        if not EndsWithXml(FileName) then
-            exit(false);
-
-        NameLower := LowerCase(FileName);
-        OrderLower := LowerCase(OrderNo);
-
-        if StrPos(NameLower, OrderLower + '_ship') > 0 then
-            exit(true);
-
-        if Setup.Get('3PL') then begin
-            ExpectedPrefix := LowerCase(Setup."Import Ship File Prefix" + OrderNo);
-            if StrPos(NameLower, ExpectedPrefix) = 1 then
-                if Setup."Import File Suffix" <> '' then
-                    exit(StrEndsWith(NameLower, LowerCase(Setup."Import File Suffix" + '.xml')))
-                else
-                    exit(true);
-        end;
-
         exit(false);
     end;
 
@@ -1928,7 +1783,6 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
         Success: Boolean;
         ErrorMessage: Text;
         NewFileName: Text;
-        OrderNo: Code[20];
         InS: InStream;
     begin
         if not Setup.Get('3PL') then
@@ -1943,10 +1797,6 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
 
         if not Success then
             ErrorMessage := GetLastErrorText();
-
-        if Success and not UseProvidedBlob then
-            if ExtractOrderNoFromFileName(FileName, OrderNo) then
-                MarkSROImported(OrderNo);
 
         if UseProvidedBlob then
             NewFileName := FileName
@@ -1999,19 +1849,6 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
             Error('Import SRO XMLport ID is not configured in Setup.');
 
         exit(ImportFileWithXmlPortId(FileName, SROXmlId));
-    end;
-
-    local procedure MarkSROImported(OrderNo: Code[20])
-    var
-        H: Record "Sales Header";
-    begin
-        if H.Get(H."Document Type"::"Return Order", OrderNo) then begin
-            H."Imported SRO Confirmation" := true;
-            H."Imported SRO Conf. Date" := Today;
-            H."3PL Imported" := true;
-            H."3PL Import Date" := Today;
-            H.Modify(true);
-        end;
     end;
 
     local procedure IsSROFile(FileName: Text): Boolean
