@@ -6,6 +6,7 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
     var
         Graph: Codeunit "SharePoint Graph Connector";
         Setup: Record "SharePoint Setup";
+        ImportedSuffixTok: Label '_imported', Locked = true;
 
     // =========================================================================
     // Export Functions
@@ -409,6 +410,7 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
         PickCount: Integer;
         ShipCount: Integer;
         OtherCount: Integer;
+        SkippedCount: Integer;
         Msg: Text;
     begin
         if not CheckSetup() then exit;
@@ -424,6 +426,10 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
         end;
 
         foreach FileName in FileNames do begin
+            if StrEndsWith(LowerCase(FileName), ImportedSuffixTok + '.xml') then begin
+                SkippedCount += 1;
+                continue;
+            end;
             case true of
                 IsPickFile(FileName):
                     begin
@@ -445,8 +451,9 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
         end;
 
         Total := FileNames.Count();
-        LogProcessAllSummary(Total, PickCount, ShipCount, OtherCount);
-        Msg := StrSubstNo('%1 file(s) processed. Picks=%2, Shipments=%3, Other=%4', Total, PickCount, ShipCount, OtherCount);
+        LogProcessAllSummary(Total, PickCount, ShipCount, OtherCount, SkippedCount);
+        Msg := StrSubstNo('%1 file(s) processed. Picks=%2, Shipments=%3, Other=%4, Skipped (already imported)=%5',
+            Total, PickCount, ShipCount, OtherCount, SkippedCount);
         if GuiAllowed then
             Message(Msg);
     end;
@@ -456,6 +463,7 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
         exit(TryImportPickFile(FileName));
     end;
 
+    // OBSOLETE / UNUSED
     procedure ImportSpecificShippedFile(FileName: Text): Boolean
     begin
         exit(TryImportShipFile(FileName));
@@ -676,7 +684,7 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
             ErrorMessage := GetLastErrorText();
 
         if Success then
-            NewFileName := BuildRenamedFileName(FileName, '_imported')
+            NewFileName := BuildRenamedFileName(FileName, ImportedSuffixTok)
         else
             NewFileName := BuildRenamedFileName(FileName, '_error');
 
@@ -834,6 +842,7 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
         exit(true);
     end;
 
+    // OBSOLETE / UNUSED 
     local procedure TryImportShipFile(FileName: Text): Boolean
     var
         TempBlob: Codeunit "Temp Blob";
@@ -1053,9 +1062,7 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
 
     local procedure BuildProcessedFileName(OriginalName: Text): Text
     begin
-        if not EndsWithXml(OriginalName) then
-            exit(OriginalName + '_imported');
-        exit(CopyStr(OriginalName, 1, StrLen(OriginalName) - 4) + '_imported.xml');
+        exit(BuildRenamedFileName(OriginalName, ImportedSuffixTok));
     end;
 
     local procedure BuildRenamedFileName(OriginalName: Text; Suffix: Text): Text
@@ -1065,6 +1072,7 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
         exit(CopyStr(OriginalName, 1, StrLen(OriginalName) - 4) + Suffix + '.xml');
     end;
 
+    // OBSOLETE / UNUSED — only called by FindPickFileForOrder / FindShipFileForOrder, both also unused.
     local procedure FindFileForOrder(OrderNo: Code[20]; SuffixCfg: Text; var FileName: Text): Boolean
     var
         FileList: List of [Text];
@@ -1120,6 +1128,7 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
         exit(false);
     end;
 
+    // OBSOLETE / UNUSED — no callers in this repo.
     local procedure MakeRenamedName(OldName: Text; IsPick: Boolean): Text
     var
         L: Integer;
@@ -1153,6 +1162,7 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
         exit(Stem + Ext);
     end;
 
+    // OBSOLETE / UNUSED — only called by MakeRenamedName, which is also unused.
     local procedure ReplaceInsensitive(S: Text; FindTxt: Text; ReplaceTxt: Text): Text
     var
         SL: Text;
@@ -1213,16 +1223,19 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
         exit(Tokens);
     end;
 
+    // OBSOLETE / UNUSED 
     local procedure FindPickFileForOrder(OrderNo: Code[20]; var FileName: Text): Boolean
     begin
         exit(FindFileForOrder(OrderNo, Setup."Import File Suffix", FileName));
     end;
 
+    // OBSOLETE / UNUSED 
     local procedure FindShipFileForOrder(OrderNo: Code[20]; var FileName: Text): Boolean
     begin
         exit(FindFileForOrder(OrderNo, Setup."Import Ship File Suffix", FileName));
     end;
 
+    // OBSOLETE / UNUSED 
     local procedure BuildExpectedFileName(OrderNo: Code[20]; FileType: Text): Text
     begin
         if not Setup.Get('3PL') then
@@ -1401,7 +1414,7 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
             TelemetryScope::ExtensionPublisher, Dims);
     end;
 
-    local procedure LogProcessAllSummary(Total: Integer; Picks: Integer; Shipments: Integer; Other: Integer)
+    local procedure LogProcessAllSummary(Total: Integer; Picks: Integer; Shipments: Integer; Other: Integer; Skipped: Integer)
     var
         Dims: Dictionary of [Text, Text];
     begin
@@ -1410,6 +1423,7 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
         Dims.Add('picks', Format(Picks));
         Dims.Add('shipments', Format(Shipments));
         Dims.Add('other', Format(Other));
+        Dims.Add('skipped', Format(Skipped));
         Session.LogMessage('3PL-PROCESS-ALL', 'ProcessAll completed',
             Verbosity::Normal, DataClassification::SystemMetadata,
             TelemetryScope::ExtensionPublisher, Dims);
