@@ -69,6 +69,8 @@ xmlport 50434 "Import Shipped Confirmation"
                         ApplyShipmentToOrder();
                         SalesHeader.Validate("Imported Shipped Confirmation", true);
                         SalesHeader.Validate("Imported Shipped Conf. Date", TODAY);
+                        SalesHeader."3PL Imported" := true;
+                        SalesHeader."3PL Import Date" := Today;
                         SalesHeader.Modify();
                     end;
                 end;
@@ -82,22 +84,26 @@ xmlport 50434 "Import Shipped Confirmation"
                         ApplyShipmentToOrder();
                         SalesHeader.Validate("Imported Shipped Confirmation", true);
                         SalesHeader.Validate("Imported Shipped Conf. Date", TODAY);
+                        SalesHeader."3PL Imported" := true;
+                        SalesHeader."3PL Import Date" := Today;
                         SalesHeader."Posting Date" := WorkDate();
                         SalesHeader.Modify();
                     end;
                 end;
             }
-            textelement(Charges) {
-             XmlName = 'charges'; 
-             MinOccurs = Zero; 
-                textelement(charge){
+            textelement(Charges)
+            {
+                XmlName = 'charges';
+                MinOccurs = Zero;
+                textelement(charge)
+                {
                     MinOccurs = Zero;
                 }
-                textelement(invoice){
+                textelement(invoice)
+                {
                     MinOccurs = Zero;
                 }
             }
-           
         }
     }
 

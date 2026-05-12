@@ -6,7 +6,7 @@ xmlport 50437 "Import Pack Confirmation_EU"
     UseDefaultNamespace = false;   // sample XML has no namespace
     PreserveWhiteSpace = true;
     UseRequestPage = false;
-    Permissions = 
+    Permissions =
         tabledata "Sales Header" = rimd,
         tabledata "Sales Line"   = rimd;
 
@@ -168,6 +168,8 @@ xmlport 50437 "Import Pack Confirmation_EU"
                         exit;
                     SalesHeader.Validate("Imported Pick Confirmation", true);
                     SalesHeader.Validate("Imported Pick Conf. Date", TODAY);
+                    SalesHeader."3PL Imported" := true;
+                    SalesHeader."3PL Import Date" := Today;
                     SalesHeader."Posting Date" := WorkDate();
                     SalesHeader.Modify();
                     // Decide whether to auto-release (optional).
@@ -257,7 +259,7 @@ xmlport 50437 "Import Pack Confirmation_EU"
         if not LineFound then
             exit;
 
-        
+
         SalesLine.Validate("Qty. to Ship", QtyToShip);
         // If you want to invoice picked qty immediately, keep next line, otherwise remove it:
         SalesLine.Validate("Qty. to Invoice", QtyToShip);

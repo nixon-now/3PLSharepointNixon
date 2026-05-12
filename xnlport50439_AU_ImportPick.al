@@ -10,7 +10,7 @@ xmlport 50439 "Import Pick Confirmation_AU"
     // Only keep permissions if you actually modify records here
     Permissions =
         tabledata "Sales Header" = rimd,
-        tabledata "Sales Line"   = rimd;
+        tabledata "Sales Line" = rimd;
 
     schema
     {
@@ -22,7 +22,8 @@ xmlport 50439 "Import Pick Confirmation_AU"
                 UseTemporary = true;
 
                 // <order no="1">
-                textattribute(headerno) { 
+                textattribute(headerno)
+                {
                     XmlName = 'no';
                 }
 
@@ -51,7 +52,7 @@ xmlport 50439 "Import Pick Confirmation_AU"
                                 if GuiAllowed then
                                     Window.Update(1, DocNo);
 
-                               
+
                                 TempSalesHeader.TransferFields(SalesHeader);
                                 if not TempSalesHeader.Insert() then;
 
@@ -63,20 +64,26 @@ xmlport 50439 "Import Pick Confirmation_AU"
                             end;
                         end;
                     }
-                    textelement(receipt_no) {
-                        MinOccurs = Zero;                     }
-                    textelement(po_no)      { 
-                          MinOccurs = Zero;    
+                    textelement(receipt_no)
+                    {
+                        MinOccurs = Zero;
                     }
-                    textelement(created)    { 
-                          MinOccurs = Zero;    
+                    textelement(po_no)
+                    {
+                        MinOccurs = Zero;
                     }
-                    textelement(packedheader)     {
+                    textelement(created)
+                    {
+                        MinOccurs = Zero;
+                    }
+                    textelement(packedheader)
+                    {
                         XmlName = 'packed';
-                     }
-                    textelement(status)     {
-                          MinOccurs = Zero;    
-                     }
+                    }
+                    textelement(status)
+                    {
+                        MinOccurs = Zero;
+                    }
 
                     textelement(ship_via)
                     {
@@ -86,20 +93,22 @@ xmlport 50439 "Import Pick Confirmation_AU"
 
                     textelement(shipto)
                     {
-                        textelement(code)     { }
-                        textelement(name)     { }
-                        textelement(name2)    { } 
+                        textelement(code) { }
+                        textelement(name) { }
+                        textelement(name2) { }
                         textelement(address1) { }
                         textelement(address2) { }
-                        textelement(city)     { }
+                        textelement(city) { }
                         textelement(province) { }
-                        textelement(country)  { }
-                        textelement(postal)   { }
-                        textelement(phone)    { 
-                              //MinOccurs = Zero;    
+                        textelement(country) { }
+                        textelement(postal) { }
+                        textelement(phone)
+                        {
+                            //MinOccurs = Zero;
                         }
-                        textelement(email)    { 
-                            //  MinOccurs = Zero;    
+                        textelement(email)
+                        {
+                            //  MinOccurs = Zero;
                         }
                     }
                 }
@@ -147,10 +156,10 @@ xmlport 50439 "Import Pick Confirmation_AU"
                         }
 
                         // present in XML — keep them so the xmlport consumes them
-                        textelement(lot)         { }
-                        textelement(serial)      { }
+                        textelement(lot) { }
+                        textelement(serial) { }
                         textelement(description) { }
-                        textelement(on_order)    { }
+                        textelement(on_order) { }
 
                         // <packed> ... </packed>
                         textelement(packed)
@@ -168,10 +177,10 @@ xmlport 50439 "Import Pick Confirmation_AU"
                                         ApplyPickQuantity(QtyPicked);
                                 end;
                             }
-                            textelement(unit)              { }
-                            textelement(package_no)        { }
+                            textelement(unit) { }
+                            textelement(package_no) { }
                             textelement(package_serial_no) { }
-                            textelement(package_weight)    { }
+                            textelement(package_weight) { }
                         }
                     }
                 }
@@ -190,6 +199,8 @@ xmlport 50439 "Import Pick Confirmation_AU"
                         exit;
                     SalesHeader.Validate("Imported Pick Confirmation", true);
                     SalesHeader.Validate("Imported Pick Conf. Date", TODAY);
+                    SalesHeader."3PL Imported" := true;
+                    SalesHeader."3PL Import Date" := Today;
                     SalesHeader."Posting Date" := WorkDate();
                     SalesHeader.Modify();
 

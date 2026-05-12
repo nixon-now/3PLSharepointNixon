@@ -6,7 +6,7 @@ xmlport 50441 "Import Shipped Confirmation_EU"
     UseDefaultNamespace = false; // sample has no namespace
     PreserveWhiteSpace = true;
 
-    Permissions = 
+    Permissions =
         tabledata "Sales Header" = rimd;
 
     schema
@@ -114,6 +114,8 @@ xmlport 50441 "Import Shipped Confirmation_EU"
             SalesHeader."Shipping Agent Service Code" := ShipServiceCode;
         SalesHeader.Validate("Imported Shipped Confirmation", true);
         SalesHeader.Validate("Imported Shipped Conf. Date", TODAY);
+        SalesHeader."3PL Imported" := true;
+        SalesHeader."3PL Import Date" := Today;
         SalesHeader."Posting Date" := WorkDate();
         SalesHeader.Modify();
     end;

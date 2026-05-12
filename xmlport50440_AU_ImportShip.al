@@ -24,12 +24,12 @@ xmlport 50440 "Import Shipped Confirmation_AU"
                             XmlOrderNo := number;  // Store order number
                         end;
                     }
-                    
+
                     textelement(ref_no) { }        // Not used
                     textelement(delivery_no) { }   // Not used
                     textelement(status) { }        // Not used
                     textelement(charge) { }        // Not used
-                    
+
                     textelement(tracking_no)
                     {
                         trigger OnAfterAssignVariable()
@@ -37,9 +37,9 @@ xmlport 50440 "Import Shipped Confirmation_AU"
                             XmlTrackingNo := tracking_no;  // Store tracking number
                         end;
                     }
-                    
+
                     textelement(shipped) { }       // Not used
-                    
+
                     textelement(carrier)           // Note: was 'courier' in old XML
                     {
                         trigger OnAfterAssignVariable()
@@ -47,9 +47,9 @@ xmlport 50440 "Import Shipped Confirmation_AU"
                             XmlCourier := carrier;  // Store carrier/shipping agent
                         end;
                     }
-                    
+
                     textelement(service) { }       // Not used
-                    
+
                     textelement(package)
                     {
                         textelement(package_no) { }           // Not used
@@ -63,7 +63,7 @@ xmlport 50440 "Import Shipped Confirmation_AU"
                 begin
                     if (XmlOrderNo <> '') then
                         ProcessOrder();
-                    
+
                     // Reset for next order
                     Clear(XmlOrderNo);
                     Clear(XmlTrackingNo);
@@ -133,6 +133,11 @@ xmlport 50440 "Import Shipped Confirmation_AU"
         if XmlTrackingNo <> '' then
             SalesHeader.Validate("Package Tracking No.", CopyStr(XmlTrackingNo, 1, MaxStrLen(SalesHeader."Package Tracking No.")));
 
+        SalesHeader."Imported Shipped Confirmation" := true;
+        SalesHeader."Imported Shipped Conf. Date" := Today;
+        SalesHeader."3PL Imported" := true;
+        SalesHeader."3PL Import Date" := Today;
+
         if not SalesHeader.Modify(true) then begin
             ShipmentSkipCount += 1;
             LogError('OrderUpdateFailed', XmlOrderNo, StrSubstNo('Failed to update order %1', XmlOrderNo));
@@ -160,10 +165,10 @@ xmlport 50440 "Import Shipped Confirmation_AU"
     var
         CustomDimensions: Dictionary of [Text, Text];
     begin
-        Session.LogMessage('0000SHP', 
-            StrSubstNo('%1: %2 for order %3', ErrorType, ErrorMessage, OrderNo), 
-            Verbosity::Error, 
-            DataClassification::SystemMetadata, 
+        Session.LogMessage('0000SHP',
+            StrSubstNo('%1: %2 for order %3', ErrorType, ErrorMessage, OrderNo),
+            Verbosity::Error,
+            DataClassification::SystemMetadata,
             TelemetryScope::ExtensionPublisher, CustomDimensions);
     end;
 

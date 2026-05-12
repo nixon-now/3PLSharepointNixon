@@ -14,7 +14,7 @@ xmlport 50432 "Import Pick Confirmation"
         {
             XmlName = 'orders';
             textattribute(Attr_Timestamp) { XmlName = 'timestamp'; }
-            textattribute(Attr_Server)    { XmlName = 'server'; }
+            textattribute(Attr_Server) { XmlName = 'server'; }
 
             // <order> ... </order>
             tableelement(OrderHeaderTmp; "Sales Header")
@@ -28,17 +28,17 @@ xmlport 50432 "Import Pick Confirmation"
                 textelement(HeaderNode)
                 {
                     XmlName = 'header';
-                    textelement(XmlId)            { XmlName = 'id'; }
-                    textelement(XmlOrderNumber)   { XmlName = 'number'; }
-                    textelement(XmlRefNo)         { XmlName = 'ref_no'; }
-                    textelement(XmlPoNo)          { XmlName = 'po_no'; }
-                    textelement(XmlCreated)       { XmlName = 'created'; }
-                    textelement(XmlPickedHdr)     { XmlName = 'picked'; }
-                    textelement(XmlComment1)      { XmlName = 'comment'; }
-                    textelement(XmlComment2)      { XmlName = 'comment2'; }
-                    textelement(XmlComment3)      { XmlName = 'comment3'; }
-                    textelement(XmlContact)       { XmlName = 'contact'; }
-                    textelement(XmlStatus)        { XmlName = 'status'; }
+                    textelement(XmlId) { XmlName = 'id'; }
+                    textelement(XmlOrderNumber) { XmlName = 'number'; }
+                    textelement(XmlRefNo) { XmlName = 'ref_no'; }
+                    textelement(XmlPoNo) { XmlName = 'po_no'; }
+                    textelement(XmlCreated) { XmlName = 'created'; }
+                    textelement(XmlPickedHdr) { XmlName = 'picked'; }
+                    textelement(XmlComment1) { XmlName = 'comment'; }
+                    textelement(XmlComment2) { XmlName = 'comment2'; }
+                    textelement(XmlComment3) { XmlName = 'comment3'; }
+                    textelement(XmlContact) { XmlName = 'contact'; }
+                    textelement(XmlStatus) { XmlName = 'status'; }
 
                     textelement(ShipViaNode)
                     {
@@ -50,17 +50,17 @@ xmlport 50432 "Import Pick Confirmation"
                     textelement(ShipToNode)
                     {
                         XmlName = 'shipto';
-                        textelement(XmlShipToCode)     { XmlName = 'code'; }
-                        textelement(XmlShipToName)     { XmlName = 'name'; }
-                        textelement(XmlShipToAddr1)    { XmlName = 'address1'; }
-                        textelement(XmlShipToAddr2)    { XmlName = 'address2'; }
-                        textelement(XmlShipToCity)     { XmlName = 'city'; }
-                        textelement(XmlShipToProv)     { XmlName = 'province'; }
-                        textelement(XmlShipToCountry)  { XmlName = 'country'; }
-                        textelement(XmlShipToPostal)   { XmlName = 'postal'; }
-                        textelement(XmlShipToContact)  { XmlName = 'contact'; }
-                        textelement(XmlShipToPhone)    { XmlName = 'phone'; }
-                        textelement(XmlShipToEmail)    { XmlName = 'email'; }
+                        textelement(XmlShipToCode) { XmlName = 'code'; }
+                        textelement(XmlShipToName) { XmlName = 'name'; }
+                        textelement(XmlShipToAddr1) { XmlName = 'address1'; }
+                        textelement(XmlShipToAddr2) { XmlName = 'address2'; }
+                        textelement(XmlShipToCity) { XmlName = 'city'; }
+                        textelement(XmlShipToProv) { XmlName = 'province'; }
+                        textelement(XmlShipToCountry) { XmlName = 'country'; }
+                        textelement(XmlShipToPostal) { XmlName = 'postal'; }
+                        textelement(XmlShipToContact) { XmlName = 'contact'; }
+                        textelement(XmlShipToPhone) { XmlName = 'phone'; }
+                        textelement(XmlShipToEmail) { XmlName = 'email'; }
                     }
                 }
 
@@ -81,15 +81,15 @@ xmlport 50432 "Import Pick Confirmation"
                         textattribute(XmlLineNoAttr) { XmlName = 'no'; }
 
                         // Child elements
-                        textelement(XmlItemTxt)      { XmlName = 'item'; }        // May be Item Reference (GTIN/barcode/customer ref)
-                        textelement(XmlDescription)  { XmlName = 'description'; }
-                        textelement(XmlOnOrderQty)   { XmlName = 'on_order'; }
+                        textelement(XmlItemTxt) { XmlName = 'item'; }        // May be Item Reference (GTIN/barcode/customer ref)
+                        textelement(XmlDescription) { XmlName = 'description'; }
+                        textelement(XmlOnOrderQty) { XmlName = 'on_order'; }
 
                         // <picked><qty>..</qty><unit>..</unit></picked>
                         textelement(PickedNode)
                         {
                             XmlName = 'picked';
-                            textelement(XmlPickedQtyEl)  { XmlName = 'qty'; }
+                            textelement(XmlPickedQtyEl) { XmlName = 'qty'; }
                             textelement(XmlPickedUnitEl) { XmlName = 'unit'; }
                         }
 
@@ -100,10 +100,12 @@ xmlport 50432 "Import Pick Confirmation"
                                 UpdateQtyUsingItemReferencePreferred();
                                 SalesHeader.Validate("Imported Pick Confirmation", true);
                                 SalesHeader.Validate("Imported Pick Conf. Date", TODAY);
+                                SalesHeader."3PL Imported" := true;
+                                SalesHeader."3PL Import Date" := Today;
                                 SalesHeader."Posting Date" := WorkDate();
                                 SalesHeader.Modify();
                             end else
-                            CurrXmlPort.Skip(); // discard temp line buffer
+                                CurrXmlPort.Skip(); // discard temp line buffer
                         end;
                     }
                 }
@@ -258,8 +260,8 @@ xmlport 50432 "Import Pick Confirmation"
             SkippedLines_NoMatch += 1;
             // ADDED DEBUG LOGGING
             customDimensions.Add('3PL', OrderNo);
-            Session.LogMessage('0000WRN', 
-                StrSubstNo('Line not matched: Order=%1, ItemTxt=%2, UOM=%3', 
+            Session.LogMessage('0000WRN',
+                StrSubstNo('Line not matched: Order=%1, ItemTxt=%2, UOM=%3',
                     OrderNo, ItemTxtFromXml, UOMTxt),
                 Verbosity::Warning,
                 DataClassification::SystemMetadata,
@@ -276,8 +278,8 @@ xmlport 50432 "Import Pick Confirmation"
             QtyToApply := RemainingQty;
 
         // ADDED DEBUG LOGGING
-        Session.LogMessage('0000INF', 
-            StrSubstNo('Updating: Order=%1, Line=%2, Item=%3, Qty=%4', 
+        Session.LogMessage('0000INF',
+            StrSubstNo('Updating: Order=%1, Line=%2, Item=%3, Qty=%4',
                 OrderNo, SalesLine."Line No.", SalesLine."No.", QtyToApply),
             Verbosity::Normal,
             DataClassification::SystemMetadata,
@@ -318,7 +320,7 @@ xmlport 50432 "Import Pick Confirmation"
             SkippedOrders += 1;
             // ADDED DEBUG LOGGING
             CustomDimensions.Add('3PL', CurrentOrderNo);
-            Session.LogMessage('0000WRN', 
+            Session.LogMessage('0000WRN',
                 StrSubstNo('Order not found: %1', CurrentOrderNo),
                 Verbosity::Warning,
                 DataClassification::SystemMetadata,
@@ -376,13 +378,12 @@ xmlport 50432 "Import Pick Confirmation"
 
         // ADDED DEBUG LOGGING
         CustomDimensions.Add('3PL', RefNo);
-        Session.LogMessage('0000WRN', 
+        Session.LogMessage('0000WRN',
             StrSubstNo('Item ref not found: %1', RefNo),
             Verbosity::Warning,
             DataClassification::SystemMetadata,
             TelemetryScope::ExtensionPublisher,
             CustomDimensions);
-            
         exit(false);
     end;
 
@@ -393,7 +394,18 @@ xmlport 50432 "Import Pick Confirmation"
     end;
 
     // Optional stats
-    procedure GetSkippedOrderCount(): Integer begin exit(SkippedOrders); end;
-    procedure GetUpdatedLineCount(): Integer begin exit(UpdatedLines); end;
-    procedure GetSkippedLineCount(): Integer begin exit(SkippedLines_NoMatch + SkippedLines_ZeroQty); end;
+    procedure GetSkippedOrderCount(): Integer
+    begin
+        exit(SkippedOrders);
+    end;
+
+    procedure GetUpdatedLineCount(): Integer
+    begin
+        exit(UpdatedLines);
+    end;
+
+    procedure GetSkippedLineCount(): Integer
+    begin
+        exit(SkippedLines_NoMatch + SkippedLines_ZeroQty);
+    end;
 }

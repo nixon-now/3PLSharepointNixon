@@ -12,7 +12,7 @@ tableextension 50409 "3PL Setup Ext" extends "SharePoint Setup"
             Caption = 'Import Pick XMLport ID';
             ToolTip = 'Object ID used for importing pick confirmations.';
         }
-         field(50002; "Export COD Xmlport ID"; Integer)
+        field(50002; "Export COD Xmlport ID"; Integer)
         {
             Caption = 'Export COD XMLport ID';
             ToolTip = 'Object ID used for exporting sales orders.';
