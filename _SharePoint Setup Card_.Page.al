@@ -31,7 +31,7 @@ page 50497 "SharePoint Setup"
                 field("SharePoint Library Id"; Rec."SharePoint Library Id") { ApplicationArea = All; }
                 field("SharePoint Site Id"; Rec."SharePoint Site Id") { ApplicationArea = All; }
                 field("SharePoint Export Folder"; Rec."SharePoint Export Folder") { ApplicationArea = All; }
-                
+
                 field("SharePoint Import Folder"; Rec."SharePoint Import Folder") { ApplicationArea = All; }
                 field("SharePoint Archive Folder"; Rec."SharePoint Archive Folder") { ApplicationArea = All; }
                 field("SharePoint Error Folder"; Rec."SharePoint Error Folder") { ApplicationArea = All; }
@@ -50,12 +50,16 @@ page 50497 "SharePoint Setup"
             {
                 Caption = 'File Settings';
                 field("Import Pick File Prefix"; Rec."Import Pick File Prefix") { ApplicationArea = All; }
-                  field("Import Ship File Prefix"; Rec."Import Ship File Prefix") { ApplicationArea = All; }
+                field("Import Ship File Prefix"; Rec."Import Ship File Prefix") { ApplicationArea = All; }
 
                 field("Import Pick File Suffix"; Rec."Import Pick File Suffix") { ApplicationArea = All; }
-                 field("Import Ship File Suffix"; Rec."Import Ship File Suffix") { ApplicationArea = All; }
 
-                               field("Filename Chars to Parse"; Rec."Filename Chars to Parse") { ApplicationArea = All; }
+
+                // only obsolete FindShipFileForOrder / BuildExpectedFileName reference it
+                // field("Import Ship File Suffix"; Rec."Import Ship File Suffix") { ApplicationArea = All; }
+
+                // never read
+                // field("Filename Chars to Parse"; Rec."Filename Chars to Parse") { ApplicationArea = All; }
             }
 
             group(Timestamps)
@@ -73,94 +77,93 @@ page 50497 "SharePoint Setup"
         {
             group(Endpoints)
             {
-              
-               action(RefreshToken)
-            {
-                ApplicationArea = All;
-                Caption = 'Refresh Token';
-                Image = Refresh;
-                ToolTip = 'Force refresh the SharePoint access token';
 
-                trigger OnAction()
-                var
-                    SharePointConnector: Codeunit "SharePoint Graph Connector";
-                begin
-                    if Confirm('Are you sure you want to refresh the SharePoint access token?') then
+                action(RefreshToken)
+                {
+                    ApplicationArea = All;
+                    Caption = 'Refresh Token';
+                    Image = Refresh;
+                    ToolTip = 'Force refresh the SharePoint access token';
+
+                    trigger OnAction()
+                    var
+                        SharePointConnector: Codeunit "SharePoint Graph Connector";
                     begin
-                        // FIX: Pass the Primary Key of the current record.
-                        // REASON: The connector needs to know which setup configuration to use.
-                        if SharePointConnector.RefreshToken(Rec."Primary Key") then
-                            Message('Token refreshed successfully')
-                        else
-                            Error('Failed to refresh token: %1', SharePointConnector.GetLastError());
+                        if Confirm('Are you sure you want to refresh the SharePoint access token?') then begin
+                            // FIX: Pass the Primary Key of the current record.
+                            // REASON: The connector needs to know which setup configuration to use.
+                            if SharePointConnector.RefreshToken(Rec."Primary Key") then
+                                Message('Token refreshed successfully')
+                            else
+                                Error('Failed to refresh token: %1', SharePointConnector.GetLastError());
+                        end;
                     end;
-                end;
+                }
+                action("Show Graph API URL (Sanity Check)")
+                {
+                    Caption = 'Show Graph API URL (Sanity Check)';
+                    ApplicationArea = All;
+                    Image = Info;
+                    Promoted = true;
+                    PromotedCategory = Process;
+                    ToolTip = 'Show the exact Graph API URL that will be used for file access, for troubleshooting and validation.';
+
+                    trigger OnAction()
+                    var
+                        // REFACTOR: Use the connector, which has the correct logic.
+                        Connector: Codeunit "SharePoint Graph Connector";
+                        FileName: Text[250];
+                        FullUrl: Text;
+                    begin
+                        // This can be a fixed name for testing, or you can add a field on the page to get user input.
+                        FileName := 'SO2179695_picked.xml';
+
+                        // Validate that the required setup fields are not blank.
+                        Rec.TestField("SharePoint Library Id");
+                        Rec.TestField("SharePoint Import Folder");
+
+                        // REFACTOR: Call the central function in the connector to build the URL.
+                        // This guarantees that the URL shown is exactly what the system will use.
+                        FullUrl :=
+                          Connector.BuildFileContentUrl(
+                            Rec."Primary Key", // Use the primary key consistently
+                            Rec."SharePoint Import Folder",
+                            FileName);
+
+                        Message('Graph API Download URL (from Connector):\n\n%1', FullUrl);
+                    end;
+                }
+
+
+
+
+
+
             }
-     action("Show Graph API URL (Sanity Check)")
-            {
-                Caption = 'Show Graph API URL (Sanity Check)';
-                ApplicationArea = All;
-                Image = Info;
-                Promoted = true;
-                PromotedCategory = Process;
-                ToolTip = 'Show the exact Graph API URL that will be used for file access, for troubleshooting and validation.';
-
-                trigger OnAction()
-                var
-                    // REFACTOR: Use the connector, which has the correct logic.
-                    Connector: Codeunit "SharePoint Graph Connector";
-                    FileName: Text[250];
-                    FullUrl: Text;
-                begin
-                    // This can be a fixed name for testing, or you can add a field on the page to get user input.
-                    FileName := 'SO2179695_picked.xml';
-
-                    // Validate that the required setup fields are not blank.
-                    Rec.TestField("SharePoint Library Id");
-                    Rec.TestField("SharePoint Import Folder");
-
-                    // REFACTOR: Call the central function in the connector to build the URL.
-                    // This guarantees that the URL shown is exactly what the system will use.
-                    FullUrl :=
-                      Connector.BuildFileContentUrl(
-                        Rec."Primary Key", // Use the primary key consistently
-                        Rec."SharePoint Import Folder",
-                        FileName);
-
-                    Message('Graph API Download URL (from Connector):\n\n%1', FullUrl);
-                end;
-            }
 
 
-
-
-
-       
-}
-
-            
 
             group(Integration)
             {
                 Caption = 'Import/Export Actions';
 
                 action(ExportAllSalesOrders)
-{
-    ApplicationArea = All;
-    Caption = 'Export All Sales Orders';
-    Image = Export;
+                {
+                    ApplicationArea = All;
+                    Caption = 'Export All Sales Orders';
+                    Image = Export;
 
-    trigger OnAction()
-    var
-        SharePointMgmt: Codeunit "3PL Order SharePoint Mgmt";
-    begin
-        // Empty filter => export ALL Released Sales Orders for the configured Location
-        SharePointMgmt.ExportAllSalesOrders('');
-        if GuiAllowed then
-            Message('Export process started. Check telemetry/Archive for results.');
-    end;
-}
-               
+                    trigger OnAction()
+                    var
+                        SharePointMgmt: Codeunit "3PL Order SharePoint Mgmt";
+                    begin
+                        // Empty filter => export ALL Released Sales Orders for the configured Location
+                        SharePointMgmt.ExportAllSalesOrders('');
+                        if GuiAllowed then
+                            Message('Export process started. Check telemetry/Archive for results.');
+                    end;
+                }
+
 
                 action(ProcessImportFiles)
                 {
@@ -269,23 +272,24 @@ page 50497 "SharePoint Setup"
                     var
                         LogRec: Record "3PL Archive";
                     begin
-                         PAGE.Run(PAGE::"3PL Archive List", LogRec); // Assuming this page exists
+                        PAGE.Run(PAGE::"3PL Archive List", LogRec); // Assuming this page exists
                     end;
                 }
             }
         }
     }
-    
+
     local procedure SanitizeFileName(FileName: Text): Text
     begin
         exit(DelChr(DelChr(FileName, '<>', ' '), '=', ' '));
     end;
+
     local procedure EnsureFolderSlash(FolderPath: Text): Text
-begin
-    if FolderPath = '' then
-        exit('');
-    if FolderPath[StrLen(FolderPath)] = '/' then
-        exit(FolderPath);
-    exit(FolderPath + '/');
-end;
+    begin
+        if FolderPath = '' then
+            exit('');
+        if FolderPath[StrLen(FolderPath)] = '/' then
+            exit(FolderPath);
+        exit(FolderPath + '/');
+    end;
 }
