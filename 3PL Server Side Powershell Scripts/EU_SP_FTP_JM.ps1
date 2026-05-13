@@ -37,6 +37,7 @@ $FtpPass            = "9tfyhNVB!"
 $FtpSourceFolder    = "/OUT"
 $FtpArchiveFolder   = "/archive"
 $FtpTargetFolder    = "/IN/ship"
+$FtpSROTargetFolder = "/IN/return"   # SRO files (*_return.xml)
 
 # Network Paths
 $NetworkSourceFolder    = "\\NIXON02\ftproot\Tigers\live\FromFMS"
@@ -148,7 +149,13 @@ function SPToFTPGeneric {
             continue
         }
 
-        $remoteTarget = "$FtpTargetFolder/$($file.Name)"
+    
+        $isSRO = $file.Name -match '(?i)_return\.xml$'
+        $targetFolder = if ($isSRO) { $FtpSROTargetFolder } else { $FtpTargetFolder }
+        $remoteTarget = "$targetFolder/$($file.Name)"
+
+        if ($isSRO) { Write-Log "Routing SRO file $($file.Name) to $FtpSROTargetFolder" }
+
         $scriptPath = Join-Path $TempFolder "winscp_script.txt"
 
         $protocolType = if ($isSFTP) { "sftp" } else { "ftp" }
