@@ -31,8 +31,7 @@ pageextension 50411 "SalesOrderCard.3PLExport" extends "Sales Order"
                 ApplicationArea = All;
                 Caption = 'Export Order';
                 Image = Export;
-                Promoted = true;
-                PromotedCategory = Process;
+                ToolTip = 'Writes this order''s XML to the SharePoint outbox.';
 
                 trigger OnAction()
                 var
@@ -40,27 +39,27 @@ pageextension 50411 "SalesOrderCard.3PLExport" extends "Sales Order"
                     SalesHeader: Record "Sales Header";
                 begin
                     // You don't need to copy, you can just get the record.
-        if not SalesHeader.Get(Rec."Document Type", Rec."No.") then
-            Error('Could not retrieve the current sales order.');
+                    if not SalesHeader.Get(Rec."Document Type", Rec."No.") then
+                        Error('Could not retrieve the current sales order.');
 
-        // *** THE FIX: Apply a filter to the primary key ***
-        // This ensures the XMLport only "sees" this one specific record.
-        SalesHeader.SetRange("Document Type", SalesHeader."Document Type");
-        SalesHeader.SetRange("No.", SalesHeader."No.");
+                    // *** THE FIX: Apply a filter to the primary key ***
+                    // This ensures the XMLport only "sees" this one specific record.
+                    SalesHeader.SetRange("Document Type", SalesHeader."Document Type");
+                    SalesHeader.SetRange("No.", SalesHeader."No.");
 
-        // Optional pre-check in UI layer
-        if SalesHeader.Status <> SalesHeader.Status::Released then
-            Error('Order must be released before export.');
+                    // Optional pre-check in UI layer
+                    if SalesHeader.Status <> SalesHeader.Status::Released then
+                        Error('Order must be released before export.');
 
-        // Headless export (no UI inside codeunit)
-        // The SalesHeader variable now carries the correct filter with it.
-        SharePointMgmt.ExportOrderToSharePoint(SalesHeader);
+                    // Headless export (no UI inside codeunit)
+                    // The SalesHeader variable now carries the correct filter with it.
+                    SharePointMgmt.ExportOrderToSharePoint(SalesHeader);
 
-        // Refresh UI record (safer to re-get it)
-        Rec.Get(SalesHeader."Document Type", SalesHeader."No.");
-        CurrPage.Update(false);
+                    // Refresh UI record (safer to re-get it)
+                    Rec.Get(SalesHeader."Document Type", SalesHeader."No.");
+                    CurrPage.Update(false);
 
-        Message('Order %1 , External Doc. No. %2 sent to 3PL Outbox.', Rec."No.", Rec."External Document No.");
+                    Message('Order %1 , External Doc. No. %2 sent to 3PL Outbox.', Rec."No.", Rec."External Document No.");
                 End;
             }
 
@@ -72,9 +71,8 @@ pageextension 50411 "SalesOrderCard.3PLExport" extends "Sales Order"
                 ApplicationArea = All;
                 Caption = 'Export COD';
                 Image = Export;
-                Promoted = true;
-                PromotedCategory = Process;
-                
+                ToolTip = 'Writes this order''s COD XML variant to the SharePoint outbox.';
+
 
                 trigger OnAction()
                 var
@@ -82,12 +80,12 @@ pageextension 50411 "SalesOrderCard.3PLExport" extends "Sales Order"
                     SalesHeader: Record "Sales Header";
                 begin
                     if not SalesHeader.Get(Rec."Document Type", Rec."No.") then
-                Error('Could not retrieve the current sales order.');
+                        Error('Could not retrieve the current sales order.');
 
-                // *** THE FIX: Apply a filter to the primary key ***
-                // This ensures the XMLport only "sees" this one specific record.
-                SalesHeader.SetRange("Document Type", SalesHeader."Document Type");
-                SalesHeader.SetRange("No.", SalesHeader."No.");
+                    // *** THE FIX: Apply a filter to the primary key ***
+                    // This ensures the XMLport only "sees" this one specific record.
+                    SalesHeader.SetRange("Document Type", SalesHeader."Document Type");
+                    SalesHeader.SetRange("No.", SalesHeader."No.");
                     if Rec.Status <> Rec.Status::Released then
                         Error('Order must be released before export.');
 
@@ -107,6 +105,7 @@ pageextension 50411 "SalesOrderCard.3PLExport" extends "Sales Order"
                 ApplicationArea = All;
                 Caption = 'Import Pick for this Order';
                 Image = Import;
+                ToolTip = 'Finds a pick confirmation file for this order in the SharePoint inbox and imports it.';
 
                 trigger OnAction()
                 var
@@ -118,7 +117,7 @@ pageextension 50411 "SalesOrderCard.3PLExport" extends "Sales Order"
                         Message('No pick file found or import failed for %1.', Rec."No.");
                 end;
             }
-            
+
 
             // -----------------------------------------------------------------
             // Import: Ship for this order
@@ -128,8 +127,7 @@ pageextension 50411 "SalesOrderCard.3PLExport" extends "Sales Order"
                 ApplicationArea = All;
                 Caption = 'Import Ship for this Order';
                 Image = Import;
-                Promoted = true;
-                PromotedCategory = Process;
+                ToolTip = 'Finds a shipment confirmation file for this order in the SharePoint inbox and imports it.';
 
                 trigger OnAction()
                 var
@@ -149,7 +147,8 @@ pageextension 50411 "SalesOrderCard.3PLExport" extends "Sales Order"
             {
                 ApplicationArea = All;
                 Caption = 'Import All Shipments (Batch)';
-                Image = Import;
+                Image = ImportLog;
+                ToolTip = 'Imports every shipment confirmation file currently in the SharePoint inbox.';
 
                 trigger OnAction()
                 var
@@ -170,6 +169,7 @@ pageextension 50411 "SalesOrderCard.3PLExport" extends "Sales Order"
                 ApplicationArea = All;
                 Caption = 'Process All Files (Pick & Shipment)';
                 Image = Process;
+                ToolTip = 'Imports every pick and shipment confirmation in the SharePoint inbox.';
 
                 trigger OnAction()
                 var
@@ -181,12 +181,12 @@ pageextension 50411 "SalesOrderCard.3PLExport" extends "Sales Order"
                     SharePointMgmt.ProcessAll();
                 end;
             }
-             action(TestShipXmlPortDebug)
+            action(TestShipXmlPortDebug)
             {
                 ApplicationArea = All;
                 Caption = 'Test Ship XMLPort';
                 Image = TestFile;
-                ToolTip = 'Test Ship XMLPort with selected file without renaming or archiving';
+                ToolTip = 'Imports the file in the "Selected File Name" field on the Sales Order card through the Ship XMLPort. Does not rename or archive.';
 
                 trigger OnAction()
                 var
@@ -223,6 +223,7 @@ pageextension 50411 "SalesOrderCard.3PLExport" extends "Sales Order"
                 ApplicationArea = All;
                 Caption = 'List Import Files';
                 Image = List;
+                ToolTip = 'Shows a message box listing the files in the SharePoint inbox.';
 
                 trigger OnAction()
                 var
@@ -252,6 +253,7 @@ pageextension 50411 "SalesOrderCard.3PLExport" extends "Sales Order"
                 ApplicationArea = All;
                 Caption = 'Show Download URL';
                 Image = View;
+                ToolTip = 'Shows a message box with the Graph API URL for the file in the "Selected File Name" field on the Sales Order card.';
 
                 trigger OnAction()
                 var
@@ -275,6 +277,7 @@ pageextension 50411 "SalesOrderCard.3PLExport" extends "Sales Order"
                 ApplicationArea = All;
                 Caption = 'Download Selected File';
                 Image = Download;
+                ToolTip = 'Opens a Save dialog to download the file in the "Selected File Name" field on the Sales Order card to your computer.';
 
                 trigger OnAction()
                 var
@@ -304,6 +307,7 @@ pageextension 50411 "SalesOrderCard.3PLExport" extends "Sales Order"
                 ApplicationArea = All;
                 Caption = 'Import Selected Pick';
                 Image = Import;
+                ToolTip = 'Imports the file in the "Selected File Name" field on the Sales Order card as a pick confirmation.';
 
                 trigger OnAction()
                 var
@@ -319,10 +323,33 @@ pageextension 50411 "SalesOrderCard.3PLExport" extends "Sales Order"
                 end;
             }
         }
+
+        addlast(Promoted)
+        {
+            group(Category_3PL)
+            {
+                Caption = '3PL';
+                Image = Allocate;
+
+                actionref(Promoted_ExportOrder; ExportOrderTo3PL) { }
+                actionref(Promoted_ExportCOD; ExportCODTo3PL) { }
+                actionref(Promoted_ProcessAll; ProcessAll3PLFiles) { }
+                actionref(Promoted_ImportPick; ImportPickForOrder) { }
+                actionref(Promoted_ImportShip; ImportShipForOrder) { }
+                actionref(Promoted_ImportAllShip; ImportAllShipment) { }
+
+                actionref(Promoted_ListFiles; ListSharePointFilesDebug) { }
+                actionref(Promoted_ImportSelectedPick; ImportSelectedPickDebug) { }
+                actionref(Promoted_DownloadFile; DownloadSelectedFileDebug) { }
+                actionref(Promoted_ShowUrl; ShowDownloadUrlDebug) { }
+                actionref(Promoted_TestShipXmlPort; TestShipXmlPortDebug) { }
+            }
+        }
     }
 
     var
         SelectedFileName: Text[250];
+
     local procedure TryXmlPortImport(XmlPortId: Integer; var InStream: InStream): Boolean
     begin
         ClearLastError();

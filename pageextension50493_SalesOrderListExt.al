@@ -15,10 +15,7 @@ pageextension 50493 "Sales Order List - 3PL Export" extends "Sales Order List"
                 ApplicationArea = All;
                 Caption = 'Export Selected to 3PL';
                 Image = Export;
-                Promoted = true;
-                PromotedCategory = Process;
-                PromotedIsBig = true;
-                ToolTip = 'Export the currently selected (highlighted) Sales Orders to 3PL.';
+                ToolTip = 'Writes the XML for each highlighted Sales Order to the SharePoint outbox.';
 
                 trigger OnAction()
                 var
@@ -59,10 +56,7 @@ pageextension 50493 "Sales Order List - 3PL Export" extends "Sales Order List"
                 ApplicationArea = All;
                 Caption = 'Export All (Batch) to 3PL';
                 Image = ExportToExcel;
-                Promoted = true;
-                PromotedCategory = Process;
-                PromotedIsBig = false; // Make it smaller to differentiate from the primary action
-                ToolTip = 'Export all Released Sales Orders for the configured Location to 3PL. This may take a long time.';
+                ToolTip = 'Shows a confirmation prompt, then writes the XML for every Released Sales Order at the configured location to the SharePoint outbox.';
 
                 trigger OnAction()
                 var
@@ -72,7 +66,7 @@ pageextension 50493 "Sales Order List - 3PL Export" extends "Sales Order List"
                 begin
                     if not Confirm('This will export ALL released orders for the configured location. Are you sure you want to continue?', false) then
                         exit;
-                        
+
                     // Passing an empty filter tells the codeunit to use its default logic for all orders.
                     SharePointMgmt.ExportAllSalesOrders('');
 
@@ -92,10 +86,7 @@ pageextension 50493 "Sales Order List - 3PL Export" extends "Sales Order List"
                 ApplicationArea = All;
                 Caption = 'Process All Files (Pick & Shipment)';
                 Image = Process;
-                Promoted = true;
-                PromotedCategory = Process;
-                PromotedIsBig = false;
-                ToolTip = 'Scan the SharePoint import folder and process all pick and shipment files.';
+                ToolTip = 'Imports every pick and shipment confirmation in the SharePoint inbox.';
 
                 trigger OnAction()
                 var
@@ -104,40 +95,52 @@ pageextension 50493 "Sales Order List - 3PL Export" extends "Sales Order List"
                     SharePointMgmt.ProcessAll(); // shows summary Message if GuiAllowed
                 end;
             }
-           
-              
-            action("Reset 3PL Export Status")
-{
-    ApplicationArea = All;
-    Caption = 'Reset 3PL Export Status';
-    Image = ResetStatus;
-    Promoted = true;
-    PromotedCategory = Process;
-    ToolTip = 'Reset the export status for selected orders so they can be exported again.';
 
-    trigger OnAction()
-    var
-        ThreePLMgmt: Codeunit "3PL Order SharePoint Mgmt";
-        SelectedSalesHeader: Record "Sales Header";
-        Count: Integer;
-    begin
-        CurrPage.SetSelectionFilter(SelectedSalesHeader);
-        Count := SelectedSalesHeader.Count;
-        
-        if Count = 0 then
-            Error('Please select at least one order to reset export status.');
-            
-        if not Confirm('Reset 3PL export status for %1 selected order(s)?\\This will reset the export flags and remove archive entries.', true, Count) then
-            exit;
-            
-        if SelectedSalesHeader.FindSet() then
-            repeat
-                ThreePLMgmt.ResetExportStatus(SelectedSalesHeader."No.", false, true);
-            until SelectedSalesHeader.Next() = 0;
-            
-        Message('Export status reset for %1 order(s). You can now export them again.', Count);
-    end;
-}
+
+            action("Reset 3PL Export Status")
+            {
+                ApplicationArea = All;
+                Caption = 'Reset 3PL Export Status';
+                Image = ResetStatus;
+                ToolTip = 'Shows a confirmation prompt, then clears the 3PL export flag and removes archive entries for each highlighted Sales Order.';
+
+                trigger OnAction()
+                var
+                    ThreePLMgmt: Codeunit "3PL Order SharePoint Mgmt";
+                    SelectedSalesHeader: Record "Sales Header";
+                    Count: Integer;
+                begin
+                    CurrPage.SetSelectionFilter(SelectedSalesHeader);
+                    Count := SelectedSalesHeader.Count;
+
+                    if Count = 0 then
+                        Error('Please select at least one order to reset export status.');
+
+                    if not Confirm('Reset 3PL export status for %1 selected order(s)?\\This will reset the export flags and remove archive entries.', true, Count) then
+                        exit;
+
+                    if SelectedSalesHeader.FindSet() then
+                        repeat
+                            ThreePLMgmt.ResetExportStatus(SelectedSalesHeader."No.", false, true);
+                        until SelectedSalesHeader.Next() = 0;
+
+                    Message('Export status reset for %1 order(s). You can now export them again.', Count);
+                end;
+            }
+        }
+
+        addlast(Promoted)
+        {
+            group(Category_3PL)
+            {
+                Caption = '3PL';
+                Image = Allocate;
+
+                actionref(Promoted_ExportSelected; "Export Selected to 3PL") { }
+                actionref(Promoted_ExportAllBatch; "Export All (Batch) to 3PL") { }
+                actionref(Promoted_ProcessAll; ProcessAll3PLFiles) { }
+                actionref(Promoted_ResetStatus; "Reset 3PL Export Status") { }
+            }
         }
     }
 }
