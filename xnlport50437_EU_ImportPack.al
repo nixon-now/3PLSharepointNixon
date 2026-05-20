@@ -156,6 +156,12 @@ xmlport 50437 "Import Pack Confirmation_EU"
                             textelement(package_serial_no) { }
                             textelement(package_weight)    { }
                         }
+
+                        trigger OnBeforeInsertRecord()
+                        begin
+                            LineCounter += 1;
+                            LineRec.Number := LineCounter;
+                        end;
                     }
                 }
 
@@ -227,6 +233,7 @@ xmlport 50437 "Import Pack Confirmation_EU"
         LineFound         : Boolean;
         ShipmentCount     : Integer;
         ShipmentSkipCount : Integer;
+        LineCounter       : Integer;
 
     // ====== Helpers ======
 
