@@ -1,24 +1,5 @@
 pageextension 50411 "SalesOrderCard.3PLExport" extends "Sales Order"
 {
-    //Caption = 'Sales Order 3PL Integration';
-
-    layout
-    {
-        addlast(General)
-        {
-            group("3PL Debug")
-            {
-                Caption = '3PL Debug';
-                field(SelectedFileName; SelectedFileName)
-                {
-                    ApplicationArea = All;
-                    Caption = 'Selected File Name';
-                    ToolTip = 'Used by debug actions to download/import a specific file from the SharePoint import folder.';
-                }
-            }
-        }
-    }
-
     actions
     {
         addlast(Processing)
@@ -31,31 +12,27 @@ pageextension 50411 "SalesOrderCard.3PLExport" extends "Sales Order"
                 ApplicationArea = All;
                 Caption = 'Export Order';
                 Image = Export;
-                ToolTip = 'Writes this order''s XML to the SharePoint outbox.';
+                ToolTip = 'Send this order to the SharePoint outbox for 3PL fulfilment.';
 
                 trigger OnAction()
                 var
                     SharePointMgmt: Codeunit "3PL Order SharePoint Mgmt";
                     SalesHeader: Record "Sales Header";
                 begin
-                    // You don't need to copy, you can just get the record.
                     if not SalesHeader.Get(Rec."Document Type", Rec."No.") then
                         Error('Could not retrieve the current sales order.');
 
-                    // *** THE FIX: Apply a filter to the primary key ***
-                    // This ensures the XMLport only "sees" this one specific record.
+                    if SalesHeader."3PL Skipped" then
+                        Error('Order %1 is marked "3PL Skipped" and will not be sent to the 3PL.', SalesHeader."No.");
+
                     SalesHeader.SetRange("Document Type", SalesHeader."Document Type");
                     SalesHeader.SetRange("No.", SalesHeader."No.");
 
-                    // Optional pre-check in UI layer
                     if SalesHeader.Status <> SalesHeader.Status::Released then
                         Error('Order must be released before export.');
 
-                    // Headless export (no UI inside codeunit)
-                    // The SalesHeader variable now carries the correct filter with it.
                     SharePointMgmt.ExportOrderToSharePoint(SalesHeader);
 
-                    // Refresh UI record (safer to re-get it)
                     Rec.Get(SalesHeader."Document Type", SalesHeader."No.");
                     CurrPage.Update(false);
 
@@ -71,8 +48,7 @@ pageextension 50411 "SalesOrderCard.3PLExport" extends "Sales Order"
                 ApplicationArea = All;
                 Caption = 'Export COD';
                 Image = Export;
-                ToolTip = 'Writes this order''s COD XML variant to the SharePoint outbox.';
-
+                ToolTip = 'Send the COD-payment variant of this order to the SharePoint outbox.';
 
                 trigger OnAction()
                 var
@@ -82,14 +58,14 @@ pageextension 50411 "SalesOrderCard.3PLExport" extends "Sales Order"
                     if not SalesHeader.Get(Rec."Document Type", Rec."No.") then
                         Error('Could not retrieve the current sales order.');
 
-                    // *** THE FIX: Apply a filter to the primary key ***
-                    // This ensures the XMLport only "sees" this one specific record.
+                    if SalesHeader."3PL Skipped" then
+                        Error('Order %1 is marked "3PL Skipped" and will not be sent to the 3PL.', SalesHeader."No.");
+
                     SalesHeader.SetRange("Document Type", SalesHeader."Document Type");
                     SalesHeader.SetRange("No.", SalesHeader."No.");
                     if Rec.Status <> Rec.Status::Released then
                         Error('Order must be released before export.');
 
-                    // Uses existing signature: ExportOrder(var SalesHeader; IsCOD: Boolean): Boolean
                     if SharePointMgmt.ExportOrder(Rec, true) then
                         Message('COD for order %1 sent to 3PL Outbox.', Rec."No.")
                     else
@@ -105,19 +81,26 @@ pageextension 50411 "SalesOrderCard.3PLExport" extends "Sales Order"
                 ApplicationArea = All;
                 Caption = 'Import Pick for this Order';
                 Image = Import;
-                ToolTip = 'Finds a pick confirmation file for this order in the SharePoint inbox and imports it.';
+                ToolTip = 'Import the pick confirmation file for this order from the SharePoint inbox.';
 
                 trigger OnAction()
                 var
                     SharePointMgmt: Codeunit "3PL Order SharePoint Mgmt";
                 begin
+                    if Rec."3PL Skipped" then
+                        Error('Order %1 is marked "3PL Skipped" — no 3PL confirmations are expected.', Rec."No.");
+                    if not Rec."3PL Order Exported" then
+                        Error('Order %1 has not been exported to the 3PL yet. Export the order before importing the pick confirmation.', Rec."No.");
+
+                    if Rec."Imported Shipped Confirmation" then
+                        Error('Cannot import a pick after the ship confirmation has been imported for order %1.', Rec."No.");
+
                     if SharePointMgmt.ImportPickForOrder(Rec."No.") then
                         Message('Pick imported for %1.', Rec."No.")
                     else
                         Message('No pick file found or import failed for %1.', Rec."No.");
                 end;
             }
-
 
             // -----------------------------------------------------------------
             // Import: Ship for this order
@@ -127,12 +110,21 @@ pageextension 50411 "SalesOrderCard.3PLExport" extends "Sales Order"
                 ApplicationArea = All;
                 Caption = 'Import Ship for this Order';
                 Image = Import;
-                ToolTip = 'Finds a shipment confirmation file for this order in the SharePoint inbox and imports it.';
+                ToolTip = 'Import the shipment confirmation file for this order from the SharePoint inbox.';
 
                 trigger OnAction()
                 var
                     SharePointMgmt: Codeunit "3PL Order SharePoint Mgmt";
                 begin
+                    if Rec."3PL Skipped" then
+                        Error('Order %1 is marked "3PL Skipped" — no 3PL confirmations are expected.', Rec."No.");
+
+                    if not Rec."3PL Order Exported" then
+                        Error('Order %1 has not been exported to the 3PL yet. Export the order before importing the ship confirmation.', Rec."No.");
+
+                    if not Rec."Imported Pick Confirmation" then
+                        Error('Import the pick confirmation for order %1 before importing the ship confirmation.', Rec."No.");
+
                     if SharePointMgmt.ImportShipForOrder(Rec."No.") then
                         Message('Shipment imported for %1.', Rec."No.")
                     else
@@ -141,89 +133,76 @@ pageextension 50411 "SalesOrderCard.3PLExport" extends "Sales Order"
             }
 
             // -----------------------------------------------------------------
-            // Import: All shipment confirmations (batch)
             // -----------------------------------------------------------------
-            action(ImportAllShipment)
+            action(ClearExportFields3PL)
             {
                 ApplicationArea = All;
-                Caption = 'Import All Shipments (Batch)';
-                Image = ImportLog;
-                ToolTip = 'Imports every shipment confirmation file currently in the SharePoint inbox.';
+                Caption = 'Clear Export Fields';
+                Image = ClearLog;
+                ToolTip = 'Reset the 3PL export flags and export date on this order.';
 
                 trigger OnAction()
                 var
-                    SharePointMgmt: Codeunit "3PL Order SharePoint Mgmt";
-                    Cnt: Integer;
+                    SalesHeader: Record "Sales Header";
                 begin
-                    // Returns count of processed shipment files
-                    Cnt := SharePointMgmt.ImportShipConfirmationBatch();
-                    Message('%1 shipment file(s) processed.', Cnt);
+                    if not Confirm('Clear the 3PL export fields on order %1?', false, Rec."No.") then
+                        exit;
+                    if not SalesHeader.Get(Rec."Document Type", Rec."No.") then
+                        Error('Could not retrieve the current sales order.');
+                    SalesHeader.ClearExport3PLFields();
+                    CurrPage.Update(false);
+                    Message('Export fields cleared on order %1.', Rec."No.");
                 end;
             }
 
-            // -----------------------------------------------------------------
-            // Process All: Pick & Shipment in one pass (uses ProcessAll())
-            // -----------------------------------------------------------------
-            action(ProcessAll3PLFiles)
+            action(ClearPickConfirmation3PL)
             {
                 ApplicationArea = All;
-                Caption = 'Process All Files (Pick & Shipment)';
-                Image = Process;
-                ToolTip = 'Imports every pick and shipment confirmation in the SharePoint inbox.';
+                Caption = 'Clear Pick Confirmation Fields';
+                Image = ClearLog;
+                ToolTip = 'Reset the imported pick confirmation flag and date on this order.';
 
                 trigger OnAction()
                 var
-                    SharePointMgmt: Codeunit "3PL Order SharePoint Mgmt";
-                    connector: codeunit "SharePoint Graph Connector";
+                    SalesHeader: Record "Sales Header";
                 begin
-                    // Runs both pick + shipment detection and processing
-                    // (This procedure shows its own Messages; it is safe in UI context.)
-                    SharePointMgmt.ProcessAll();
+                    if not Confirm('Clear the pick confirmation fields on order %1?', false, Rec."No.") then
+                        exit;
+                    if not SalesHeader.Get(Rec."Document Type", Rec."No.") then
+                        Error('Could not retrieve the current sales order.');
+                    SalesHeader.ClearPickConfirmation3PLFields();
+                    CurrPage.Update(false);
+                    Message('Pick confirmation fields cleared on order %1.', Rec."No.");
                 end;
             }
-            action(TestShipXmlPortDebug)
+
+            action(ClearShipConfirmation3PL)
             {
                 ApplicationArea = All;
-                Caption = 'Test Ship XMLPort';
-                Image = TestFile;
-                ToolTip = 'Imports the file in the "Selected File Name" field on the Sales Order card through the Ship XMLPort. Does not rename or archive.';
+                Caption = 'Clear Ship Confirmation Fields';
+                Image = ClearLog;
+                ToolTip = 'Reset the imported shipment confirmation flag and date on this order.';
 
                 trigger OnAction()
                 var
-                    Setup: Record "SharePoint Setup";
-                    Graph: Codeunit "SharePoint Graph Connector";
-                    OutS: OutStream;
-                    FileStream: InStream;
-                    XMLPortId: Integer;
-                    TempBlob: codeunit "Temp Blob";
+                    SalesHeader: Record "Sales Header";
                 begin
-                    if not Setup.Get('3PL') then
-                        Error('3PL SharePoint setup not configured.');
-
-                    if SelectedFileName = '' then
-                        Error('Set the "Selected File Name" in the 3PL Debug group first.');
-                    TempBlob.CreateOutStream(OutS);
-                    if not Graph.DownloadFile('3PL', Setup."SharePoint Import Folder", SelectedFileName, OutS) then
-                        Error('Download failed: %1', Graph.GetLastError());
-
-                    XMLPortId := Setup."Import Ship XmlPort Id";
-                    TempBlob.CreateInStream(FileStream);
-                    if TryXmlPortImport(XMLPortId, FileStream) then
-                        Message('XMLPort import successful for file: %1', SelectedFileName)
-                    else
-                        Error('XMLPort import failed: %1', GetLastErrorText());
+                    if not Confirm('Clear the ship confirmation fields on order %1?', false, Rec."No.") then
+                        exit;
+                    if not SalesHeader.Get(Rec."Document Type", Rec."No.") then
+                        Error('Could not retrieve the current sales order.');
+                    SalesHeader.ClearShipConfirmation3PLFields();
+                    CurrPage.Update(false);
+                    Message('Ship confirmation fields cleared on order %1.', Rec."No.");
                 end;
             }
 
-            // ===========================
-            // Debug helpers
-            // ===========================
             action(ListSharePointFilesDebug)
             {
                 ApplicationArea = All;
                 Caption = 'List Import Files';
                 Image = List;
-                ToolTip = 'Shows a message box listing the files in the SharePoint inbox.';
+                ToolTip = 'Show the file names currently in the SharePoint inbox.';
 
                 trigger OnAction()
                 var
@@ -247,81 +226,6 @@ pageextension 50411 "SalesOrderCard.3PLExport" extends "Sales Order"
                     Message(Output);
                 end;
             }
-
-            action(ShowDownloadUrlDebug)
-            {
-                ApplicationArea = All;
-                Caption = 'Show Download URL';
-                Image = View;
-                ToolTip = 'Shows a message box with the Graph API URL for the file in the "Selected File Name" field on the Sales Order card.';
-
-                trigger OnAction()
-                var
-                    Connector: Codeunit "SharePoint Graph Connector";
-                    Setup: Record "SharePoint Setup";
-                    Url: Text;
-                begin
-                    if not Setup.Get('3PL') then
-                        Error('3PL SharePoint setup is not configured.');
-
-                    if SelectedFileName = '' then
-                        Error('Set the "Selected File Name" in the 3PL Debug group first.');
-
-                    Url := Connector.BuildFileContentUrl('3PL', Setup."SharePoint Import Folder", SelectedFileName);
-                    Message('Download URL (Debug):\n%1', Url);
-                end;
-            }
-
-            action(DownloadSelectedFileDebug)
-            {
-                ApplicationArea = All;
-                Caption = 'Download Selected File';
-                Image = Download;
-                ToolTip = 'Opens a Save dialog to download the file in the "Selected File Name" field on the Sales Order card to your computer.';
-
-                trigger OnAction()
-                var
-                    Connector: Codeunit "SharePoint Graph Connector";
-                    Setup: Record "SharePoint Setup";
-                    TempBlob: Codeunit "Temp Blob";
-                    OutS: OutStream;
-                    InS: InStream;
-                begin
-                    if not Setup.Get('3PL') then
-                        Error('3PL SharePoint setup not configured.');
-
-                    if SelectedFileName = '' then
-                        Error('Set the "Selected File Name" in the 3PL Debug group first.');
-
-                    TempBlob.CreateOutStream(OutS);
-                    if not Connector.DownloadFile('3PL', Setup."SharePoint Import Folder", SelectedFileName, OutS) then
-                        Error('Download failed: %1', Connector.GetLastError());
-
-                    TempBlob.CreateInStream(InS);
-                    DownloadFromStream(InS, 'Save file', '', '', SelectedFileName);
-                end;
-            }
-
-            action(ImportSelectedPickDebug)
-            {
-                ApplicationArea = All;
-                Caption = 'Import Selected Pick';
-                Image = Import;
-                ToolTip = 'Imports the file in the "Selected File Name" field on the Sales Order card as a pick confirmation.';
-
-                trigger OnAction()
-                var
-                    SharePointMgmt: Codeunit "3PL Order SharePoint Mgmt";
-                begin
-                    if SelectedFileName = '' then
-                        Error('Set the "Selected File Name" in the 3PL Debug group first.');
-
-                    if SharePointMgmt.ImportSpecificPickedFile(SelectedFileName) then
-                        Message('Pick file %1 imported.', SelectedFileName)
-                    else
-                        Message('Import failed or file not valid: %1', SelectedFileName);
-                end;
-            }
         }
 
         addlast(Promoted)
@@ -333,27 +237,13 @@ pageextension 50411 "SalesOrderCard.3PLExport" extends "Sales Order"
 
                 actionref(Promoted_ExportOrder; ExportOrderTo3PL) { }
                 actionref(Promoted_ExportCOD; ExportCODTo3PL) { }
-                actionref(Promoted_ProcessAll; ProcessAll3PLFiles) { }
                 actionref(Promoted_ImportPick; ImportPickForOrder) { }
                 actionref(Promoted_ImportShip; ImportShipForOrder) { }
-                actionref(Promoted_ImportAllShip; ImportAllShipment) { }
-
+                actionref(Promoted_ClearExport; ClearExportFields3PL) { }
+                actionref(Promoted_ClearPick; ClearPickConfirmation3PL) { }
+                actionref(Promoted_ClearShip; ClearShipConfirmation3PL) { }
                 actionref(Promoted_ListFiles; ListSharePointFilesDebug) { }
-                actionref(Promoted_ImportSelectedPick; ImportSelectedPickDebug) { }
-                actionref(Promoted_DownloadFile; DownloadSelectedFileDebug) { }
-                actionref(Promoted_ShowUrl; ShowDownloadUrlDebug) { }
-                actionref(Promoted_TestShipXmlPort; TestShipXmlPortDebug) { }
             }
         }
     }
-
-    var
-        SelectedFileName: Text[250];
-
-    local procedure TryXmlPortImport(XmlPortId: Integer; var InStream: InStream): Boolean
-    begin
-        ClearLastError();
-        if not XMLPORT.Import(XmlPortId, InStream) then exit(false);
-        exit(true);
-    end;
 }

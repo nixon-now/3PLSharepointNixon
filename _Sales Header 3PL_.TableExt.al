@@ -191,6 +191,39 @@ tableextension 50450 "Sales Header 3PL" extends "Sales Header"
         Modify();
     end;
 
+    procedure ClearExport3PLFields()
+    begin
+        "3PL Exported" := false;
+        "3PL Order Exported" := false;
+        "3PL COD Exported" := false;
+        "3PL Export Date" := 0D;
+        Modify();
+    end;
+
+    procedure ClearPickConfirmation3PLFields()
+    begin
+        "Imported Pick Confirmation" := false;
+        "Imported Pick Conf. Date" := 0D;
+        RefreshImported3PLFlag();
+        Modify();
+    end;
+
+    procedure ClearShipConfirmation3PLFields()
+    begin
+        "Imported Shipped Confirmation" := false;
+        "Imported Shipped Conf. Date" := 0D;
+        RefreshImported3PLFlag();
+        Modify();
+    end;
+
+    local procedure RefreshImported3PLFlag()
+    begin
+        if (not "Imported Pick Confirmation") and (not "Imported Shipped Confirmation") then begin
+            "3PL Imported" := false;
+            "3PL Import Date" := 0D;
+        end;
+    end;
+
     local procedure Update3PLPrepCodeDescription()
     var
         PrepCodeSetup: Record "3PL Prep Code Setup";

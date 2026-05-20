@@ -378,7 +378,7 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
     begin
         if not FirstFileForOrder(SalesOrderNo, ConfType, FileName) then
             exit(false);
-        exit(ImportConfirmationFromSharePoint(FileName, ConfType));
+        exit(TryImportConfirmation(FileName, ConfType));
     end;
 
     procedure ImportPickConfirmationBatch(): Integer
@@ -405,12 +405,17 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
     procedure ProcessAll()
     var
         FileNames: List of [Text];
+        PickFiles: List of [Text];
+        ShipFiles: List of [Text];
         FileName: Text;
         Total: Integer;
         PickCount: Integer;
         ShipCount: Integer;
         OtherCount: Integer;
-        SkippedCount: Integer;
+        AlreadyProcessedCount: Integer;
+        PickSkippedAlreadyAppliedCount: Integer;
+        ShipDeferredAwaitingPickCount: Integer;
+        PeekedOrderNo: Code[20];
         Msg: Text;
     begin
         if not CheckSetup() then exit;
@@ -425,22 +430,17 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
             exit;
         end;
 
+
         foreach FileName in FileNames do begin
-            if StrEndsWith(LowerCase(FileName), ImportedSuffixTok + '.xml') then begin
-                SkippedCount += 1;
+            if IsAlreadyProcessed(FileName) then begin
+                AlreadyProcessedCount += 1;
                 continue;
             end;
             case true of
                 IsPickFile(FileName):
-                    begin
-                        TryImportConfirmation(FileName, "3PL Import Type"::Pick);
-                        PickCount += 1;
-                    end;
+                    PickFiles.Add(FileName);
                 IsShipFile(FileName):
-                    begin
-                        TryImportConfirmation(FileName, "3PL Import Type"::Ship);
-                        ShipCount += 1;
-                    end;
+                    ShipFiles.Add(FileName);
                 else begin
                     ArchiveLog(false, "3PL Log Direction"::Import, '', '', FileName,
                         Setup, "3PL Archive Step"::ImportConfirmation,
@@ -450,12 +450,102 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
             end;
         end;
 
+        foreach FileName in PickFiles do begin
+            PeekedOrderNo := '';
+            if TryPeekOrderNoFromInboxFile(FileName, PeekedOrderNo) then
+                if OrderHasPickImported(PeekedOrderNo) then begin
+                    MarkPickAlreadyApplied(FileName, PeekedOrderNo);
+                    PickSkippedAlreadyAppliedCount += 1;
+                    continue;
+                end;
+            TryImportConfirmation(FileName, "3PL Import Type"::Pick);
+            PickCount += 1;
+        end;
+
+        foreach FileName in ShipFiles do begin
+            PeekedOrderNo := '';
+            if TryPeekOrderNoFromInboxFile(FileName, PeekedOrderNo) then
+                if not OrderHasPickImported(PeekedOrderNo) then begin
+                    LogShipDeferredAwaitingPick(FileName, PeekedOrderNo);
+                    ShipDeferredAwaitingPickCount += 1;
+                    continue;
+                end;
+            TryImportConfirmation(FileName, "3PL Import Type"::Ship);
+            ShipCount += 1;
+        end;
+
         Total := FileNames.Count();
-        LogProcessAllSummary(Total, PickCount, ShipCount, OtherCount, SkippedCount);
-        Msg := StrSubstNo('%1 file(s) processed. Picks=%2, Shipments=%3, Other=%4, Skipped (already imported)=%5',
-            Total, PickCount, ShipCount, OtherCount, SkippedCount);
+        LogProcessAllSummary(Total, PickCount, ShipCount, OtherCount, AlreadyProcessedCount,
+            PickSkippedAlreadyAppliedCount, ShipDeferredAwaitingPickCount);
+        Msg := StrSubstNo(
+            '%1 file(s) processed. Picks=%2 (skipped %3 already-applied), Shipments=%4 (deferred %5 awaiting pick), Other=%6, Already-imported skipped=%7',
+            Total, PickCount, PickSkippedAlreadyAppliedCount, ShipCount, ShipDeferredAwaitingPickCount,
+            OtherCount, AlreadyProcessedCount);
         if GuiAllowed then
             Message(Msg);
+    end;
+
+    [TryFunction]
+    local procedure TryPeekOrderNoFromInboxFile(FileName: Text; var OrderNo: Code[20])
+    var
+        TempBlob: Codeunit "Temp Blob";
+        XmlDoc: XmlDocument;
+        NumberNode: XmlNode;
+        InS: InStream;
+        OutS: OutStream;
+    begin
+        OrderNo := '';
+        TempBlob.CreateOutStream(OutS);
+        if not Graph.DownloadFile('3PL', Setup."SharePoint Import Folder", FileName, OutS) then
+            Error('Download failed for peek');
+
+        TempBlob.CreateInStream(InS, TextEncoding::UTF8);
+        if not XmlDocument.ReadFrom(InS, XmlDoc) then
+            Error('XML parse failed for peek');
+
+        if not XmlDoc.SelectSingleNode('//header/number', NumberNode) then
+            Error('Order-number element not found');
+
+        if not NumberNode.IsXmlElement() then
+            Error('Order-number node is not an element');
+
+        OrderNo := CopyStr(NumberNode.AsXmlElement().InnerText, 1, MaxStrLen(OrderNo));
+        if OrderNo = '' then
+            Error('Order-number element is empty');
+    end;
+
+    local procedure OrderHasPickImported(OrderNo: Code[20]): Boolean
+    var
+        SalesHeader: Record "Sales Header";
+    begin
+        if OrderNo = '' then
+            exit(false);
+        if not SalesHeader.Get(SalesHeader."Document Type"::Order, OrderNo) then
+            exit(false);
+        exit(SalesHeader."Imported Pick Confirmation");
+    end;
+
+    local procedure MarkPickAlreadyApplied(FileName: Text; OrderNo: Code[20])
+    var
+        NewFileName: Text;
+    begin
+        NewFileName := BuildRenamedFileName(FileName, ImportedSuffixTok);
+        if NewFileName <> FileName then
+            if not RenameFile('3PL', Setup."SharePoint Import Folder", FileName, NewFileName) then
+                LogMoveFailure(FileName, Graph.GetLastError());
+
+        LogPickSkippedAlreadyApplied(FileName, NewFileName, OrderNo);
+        ArchiveLog(
+            true,
+            "3PL Log Direction"::Import,
+            OrderNo,
+            '',
+            NewFileName,
+            Setup,
+            "3PL Archive Step"::ImportConfirmation,
+            StrSubstNo('Skipped: order %1 already has pick imported', OrderNo),
+            Setup."SharePoint Import Folder"
+        );
     end;
 
     procedure ImportSpecificPickedFile(FileName: Text): Boolean
@@ -723,6 +813,8 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
         Suffixes: List of [Text];
         Token: Text;
     begin
+        if IsAlreadyProcessed(FileName) then
+            exit(false);
         if not EndsWithXml(FileName) then
             exit(false);
 
@@ -770,29 +862,40 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
     local procedure IsShipFile(FileName: Text): Boolean
     var
         NameLower: Text;
-        HasShipKeyword: Boolean;
-        HasGenericPrefix: Boolean;
+        NameLen: Integer;
+        DotXmlPos: Integer;
         HasShipPrefix: Boolean;
+        Suffixes: List of [Text];
+        Token: Text;
     begin
+        if IsAlreadyProcessed(FileName) then
+            exit(false);
         if not EndsWithXml(FileName) then
             exit(false);
 
         NameLower := LowerCase(FileName);
-        HasShipKeyword := (StrPos(NameLower, '_ship') > 0) or (StrPos(NameLower, 'ship_') > 0);
+        NameLen := StrLen(NameLower);
+
+        DotXmlPos := StrPos(NameLower, '.xml');
+        if DotXmlPos <> (NameLen - 3) then
+            exit(false);
 
         if not Setup.Get('3PL') then
-            exit(HasShipKeyword);
-
-        HasGenericPrefix := (Setup."Import File Prefix" <> '') and
-                            StartsWithIgnoreCase(FileName, Setup."Import File Prefix");
-
-        if HasShipKeyword or HasGenericPrefix then
-            exit(true);
+            exit(false);
 
         HasShipPrefix := (Setup."Import Ship File Prefix" <> '') and
                          StartsWithIgnoreCase(FileName, Setup."Import Ship File Prefix");
 
-        exit(HasShipPrefix);
+        if HasShipPrefix then begin
+            if Setup."Import Ship File Suffix" = '' then
+                exit(true);
+            Suffixes := ParseSuffixTokens(Setup."Import Ship File Suffix");
+            foreach Token in Suffixes do
+                if (StrPos(NameLower, Token) > 0) and (StrPos(NameLower, Token) < DotXmlPos) then
+                    exit(true);
+        end;
+
+        exit(false);
     end;
 
     local procedure TryImportPickFile(FileName: Text): Boolean
@@ -953,6 +1056,18 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
             exit(false);
         Tail := LowerCase(CopyStr(FileName, L - 3));
         exit(Tail = '.xml');
+    end;
+
+    local procedure IsAlreadyProcessed(FileName: Text): Boolean
+    var
+        BaseLower: Text;
+        L: Integer;
+    begin
+        if not EndsWithXml(FileName) then
+            exit(false);
+        L := StrLen(FileName);
+        BaseLower := LowerCase(CopyStr(FileName, 1, L - 4));
+        exit(StrEndsWith(BaseLower, ImportedSuffixTok) or StrEndsWith(BaseLower, '_error'));
     end;
 
     local procedure StartsWithIgnoreCase(Value: Text; Prefix: Text): Boolean
@@ -1414,7 +1529,7 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
             TelemetryScope::ExtensionPublisher, Dims);
     end;
 
-    local procedure LogProcessAllSummary(Total: Integer; Picks: Integer; Shipments: Integer; Other: Integer; Skipped: Integer)
+    local procedure LogProcessAllSummary(Total: Integer; Picks: Integer; Shipments: Integer; Other: Integer; AlreadyProcessedSkipped: Integer; PicksSkippedDuplicate: Integer; ShipsDeferredAwaitingPick: Integer)
     var
         Dims: Dictionary of [Text, Text];
     begin
@@ -1423,9 +1538,36 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
         Dims.Add('picks', Format(Picks));
         Dims.Add('shipments', Format(Shipments));
         Dims.Add('other', Format(Other));
-        Dims.Add('skipped', Format(Skipped));
+        Dims.Add('skipped', Format(AlreadyProcessedSkipped));
+        Dims.Add('picksSkippedDuplicate', Format(PicksSkippedDuplicate));
+        Dims.Add('shipsDeferredAwaitingPick', Format(ShipsDeferredAwaitingPick));
         Session.LogMessage('3PL-PROCESS-ALL', 'ProcessAll completed',
             Verbosity::Normal, DataClassification::SystemMetadata,
+            TelemetryScope::ExtensionPublisher, Dims);
+    end;
+
+    local procedure LogPickSkippedAlreadyApplied(OriginalName: Text; NewName: Text; OrderNo: Code[20])
+    var
+        Dims: Dictionary of [Text, Text];
+    begin
+        Clear(Dims);
+        Dims.Add('orderNo', OrderNo);
+        Dims.Add('file', CopyStr(OriginalName, 1, 100));
+        Dims.Add('newFile', CopyStr(NewName, 1, 100));
+        Session.LogMessage('3PL-PICK-DUP', 'Pick confirmation skipped: order already has pick imported',
+            Verbosity::Normal, DataClassification::SystemMetadata,
+            TelemetryScope::ExtensionPublisher, Dims);
+    end;
+
+    local procedure LogShipDeferredAwaitingPick(FileName: Text; OrderNo: Code[20])
+    var
+        Dims: Dictionary of [Text, Text];
+    begin
+        Clear(Dims);
+        Dims.Add('orderNo', OrderNo);
+        Dims.Add('file', CopyStr(FileName, 1, 100));
+        Session.LogMessage('3PL-SHIP-DEFERRED', 'Ship confirmation deferred: pick not yet imported for this order',
+            Verbosity::Warning, DataClassification::SystemMetadata,
             TelemetryScope::ExtensionPublisher, Dims);
     end;
 
