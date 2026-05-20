@@ -129,9 +129,9 @@ xmlport 50440 "Import Shipped Confirmation_AU"
         end;
 
         if XmlCourier <> '' then
-            SalesHeader.Validate("Shipping Agent Code", XmlCourier);
+            SalesHeader."Shipping Agent Code" := CopyStr(XmlCourier, 1, MaxStrLen(SalesHeader."Shipping Agent Code"));
         if XmlTrackingNo <> '' then
-            SalesHeader.Validate("Package Tracking No.", CopyStr(XmlTrackingNo, 1, MaxStrLen(SalesHeader."Package Tracking No.")));
+            SalesHeader."Package Tracking No." := CopyStr(XmlTrackingNo, 1, MaxStrLen(SalesHeader."Package Tracking No."));
 
         SalesHeader."Imported Shipped Confirmation" := true;
         SalesHeader."Imported Shipped Conf. Date" := Today;
