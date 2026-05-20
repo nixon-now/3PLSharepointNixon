@@ -182,6 +182,12 @@ xmlport 50439 "Import Pick Confirmation_AU"
                             textelement(package_serial_no) { }
                             textelement(package_weight) { }
                         }
+
+                        trigger OnBeforeInsertRecord()
+                        begin
+                            LineCounter += 1;
+                            LineRec.Number := LineCounter;
+                        end;
                     }
                 }
 
@@ -250,6 +256,7 @@ xmlport 50439 "Import Pick Confirmation_AU"
         Window: Dialog;
         SuppressMessages: Boolean;
         GuiAllowed: Boolean;
+        LineCounter: Integer;
 
         GotSHeader: Boolean;
         LineFound: Boolean;

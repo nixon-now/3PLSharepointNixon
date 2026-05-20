@@ -186,6 +186,12 @@ xmlport 50442 "Import SRO Confirmation_EU"
                         {
                             XmlName = 'location';
                         }
+
+                        trigger OnBeforeInsertRecord()
+                        begin
+                            LineCounter += 1;
+                            LineRec.Number := LineCounter;
+                        end;
                     }
                 }
 
@@ -252,6 +258,7 @@ xmlport 50442 "Import SRO Confirmation_EU"
         Cancellation: Boolean;
         ReceiptCount: Integer;
         ReceiptSkipCount: Integer;
+        LineCounter: Integer;
 
     local procedure MapLineByGTIN(GTINVal: Text)
     begin
