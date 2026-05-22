@@ -178,6 +178,7 @@ tableextension 50450 "Sales Header 3PL" extends "Sales Header"
         "Imported Shipped Conf. Date" := 0D;
     end;
 
+    /*
     procedure Reset3PLFields()
     begin
         "3PL Imported" := false;
@@ -223,6 +224,7 @@ tableextension 50450 "Sales Header 3PL" extends "Sales Header"
             "3PL Import Date" := 0D;
         end;
     end;
+    */
 
     local procedure Update3PLPrepCodeDescription()
     var

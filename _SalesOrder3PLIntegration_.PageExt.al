@@ -134,6 +134,7 @@ pageextension 50411 "SalesOrderCard.3PLExport" extends "Sales Order"
 
             // -----------------------------------------------------------------
             // -----------------------------------------------------------------
+            /*
             action(ClearExportFields3PL)
             {
                 ApplicationArea = All;
@@ -226,6 +227,7 @@ pageextension 50411 "SalesOrderCard.3PLExport" extends "Sales Order"
                     Message(Output);
                 end;
             }
+            */
         }
 
         addlast(Promoted)
@@ -239,10 +241,12 @@ pageextension 50411 "SalesOrderCard.3PLExport" extends "Sales Order"
                 actionref(Promoted_ExportCOD; ExportCODTo3PL) { }
                 actionref(Promoted_ImportPick; ImportPickForOrder) { }
                 actionref(Promoted_ImportShip; ImportShipForOrder) { }
+                /*
                 actionref(Promoted_ClearExport; ClearExportFields3PL) { }
                 actionref(Promoted_ClearPick; ClearPickConfirmation3PL) { }
                 actionref(Promoted_ClearShip; ClearShipConfirmation3PL) { }
                 actionref(Promoted_ListFiles; ListSharePointFilesDebug) { }
+                */
             }
         }
     }
