@@ -415,6 +415,7 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
         AlreadyProcessedCount: Integer;
         PickSkippedAlreadyAppliedCount: Integer;
         ShipDeferredAwaitingPickCount: Integer;
+        ShipRejectedNoOrderCount: Integer;
         PeekedOrderNo: Code[20];
         Msg: Text;
     begin
@@ -465,10 +466,19 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
         foreach FileName in ShipFiles do begin
             PeekedOrderNo := '';
             if TryPeekOrderNoFromInboxFile(FileName, PeekedOrderNo) then
-                if not OrderHasPickImported(PeekedOrderNo) then begin
-                    LogShipDeferredAwaitingPick(FileName, PeekedOrderNo);
-                    ShipDeferredAwaitingPickCount += 1;
-                    continue;
+                case GetOrderPickStatus(PeekedOrderNo) of
+                    0:
+                        begin
+                            MarkShipNoOrder(FileName, PeekedOrderNo);
+                            ShipRejectedNoOrderCount += 1;
+                            continue;
+                        end;
+                    1:
+                        begin
+                            LogShipDeferredAwaitingPick(FileName, PeekedOrderNo);
+                            ShipDeferredAwaitingPickCount += 1;
+                            continue;
+                        end;
                 end;
             TryImportConfirmation(FileName, "3PL Import Type"::Ship);
             ShipCount += 1;
@@ -476,10 +486,11 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
 
         Total := FileNames.Count();
         LogProcessAllSummary(Total, PickCount, ShipCount, OtherCount, AlreadyProcessedCount,
-            PickSkippedAlreadyAppliedCount, ShipDeferredAwaitingPickCount);
+            PickSkippedAlreadyAppliedCount, ShipDeferredAwaitingPickCount, ShipRejectedNoOrderCount);
         Msg := StrSubstNo(
-            '%1 file(s) processed. Picks=%2 (skipped %3 already-applied), Shipments=%4 (deferred %5 awaiting pick), Other=%6, Already-imported skipped=%7',
-            Total, PickCount, PickSkippedAlreadyAppliedCount, ShipCount, ShipDeferredAwaitingPickCount,
+            '%1 file(s) processed. Picks=%2 (skipped %3 already-applied), Shipments=%4 (deferred %5 awaiting pick, rejected %6 no open order), Other=%7, Already-imported skipped=%8',
+            Total, PickCount, PickSkippedAlreadyAppliedCount, ShipCount,
+            ShipDeferredAwaitingPickCount, ShipRejectedNoOrderCount,
             OtherCount, AlreadyProcessedCount);
         if GuiAllowed then
             Message(Msg);
@@ -523,6 +534,51 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
         if not SalesHeader.Get(SalesHeader."Document Type"::Order, OrderNo) then
             exit(false);
         exit(SalesHeader."Imported Pick Confirmation");
+    end;
+
+    // Return values:
+    //   0 = order does not exist as an open Sales Order (posted, archived, deleted, or never existed)
+    //   1 = order exists, pick confirmation not yet imported
+    //   2 = order exists, pick confirmation imported
+    local procedure GetOrderPickStatus(OrderNo: Code[20]): Integer
+    var
+        SalesHeader: Record "Sales Header";
+    begin
+        if OrderNo = '' then
+            exit(0);
+        if not SalesHeader.Get(SalesHeader."Document Type"::Order, OrderNo) then
+            exit(0);
+        if SalesHeader."Imported Pick Confirmation" then
+            exit(2);
+        exit(1);
+    end;
+
+    local procedure MarkShipNoOrder(FileName: Text; OrderNo: Code[20])
+    var
+        NewFileName: Text;
+        ErrorMessage: Text;
+    begin
+        ErrorMessage := StrSubstNo(
+            'Ship confirmation could not be applied: order %1 not found as an open Sales Order. The order may have been posted, archived, or deleted before this import ran.',
+            OrderNo);
+
+        NewFileName := BuildRenamedFileName(FileName, '_error');
+        if NewFileName <> FileName then
+            if not RenameFile('3PL', Setup."SharePoint Import Folder", FileName, NewFileName) then
+                LogMoveFailure(FileName, Graph.GetLastError());
+
+        LogFileImportFailed(FileName, NewFileName, ErrorMessage, 'Ship');
+        ArchiveLog(
+            false,
+            "3PL Log Direction"::Import,
+            OrderNo,
+            '',
+            NewFileName,
+            Setup,
+            "3PL Archive Step"::ImportConfirmation,
+            ErrorMessage,
+            Setup."SharePoint Import Folder"
+        );
     end;
 
     local procedure MarkPickAlreadyApplied(FileName: Text; OrderNo: Code[20])
@@ -754,7 +810,15 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
 
     local procedure TryImportConfirmation(FileName: Text; ConfType: Enum "3PL Import Type"): Boolean
     var
-        Success: Boolean;
+        PickXmlPort: XmlPort "Import Pick Confirmation_AU";
+        ShipXmlPort: XmlPort "Import Shipped Confirmation_AU";
+        TempBlob: Codeunit "Temp Blob";
+        InS: InStream;
+        OutS: OutStream;
+        XmlPortRan: Boolean;
+        EffectiveSuccess: Boolean;
+        RecordsUpdated: Integer;
+        PeekedOrderNo: Code[20];
         ErrorMessage: Text;
         NewFileName: Text;
         LabelTxt: Text;
@@ -768,12 +832,50 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
             ConfType::Ship:
                 LabelTxt := 'Ship';
         end;
-        ClearLastError();
-        Success := ImportConfirmationFromSharePoint_Try(FileName, ConfType);
-        if not Success then
-            ErrorMessage := GetLastErrorText();
 
-        if Success then
+        TempBlob.CreateOutStream(OutS);
+        if not Graph.DownloadFile('3PL', Setup."SharePoint Import Folder", FileName, OutS) then begin
+            EffectiveSuccess := false;
+            ErrorMessage := StrSubstNo('Failed to download file from SharePoint: %1', Graph.GetLastError());
+        end else begin
+            TempBlob.CreateInStream(InS, TextEncoding::UTF8);
+
+            ClearLastError();
+            case ConfType of
+                ConfType::Pick:
+                    begin
+                        XmlPortRan := TryRunPickXmlPort(PickXmlPort, InS);
+                        if XmlPortRan then
+                            RecordsUpdated := PickXmlPort.GetShipmentCount();
+                    end;
+                ConfType::Ship:
+                    begin
+                        XmlPortRan := TryRunShipXmlPort(ShipXmlPort, InS);
+                        if XmlPortRan then
+                            RecordsUpdated := ShipXmlPort.GetShipmentCount();
+                    end;
+            end;
+
+            if not XmlPortRan then begin
+                EffectiveSuccess := false;
+                ErrorMessage := GetLastErrorText();
+            end else begin
+                EffectiveSuccess := RecordsUpdated > 0;
+                if not EffectiveSuccess then begin
+                    PeekedOrderNo := '';
+                    if TryPeekOrderNoFromInboxFile(FileName, PeekedOrderNo) and (PeekedOrderNo <> '') then
+                        ErrorMessage := StrSubstNo(
+                            '%1 confirmation could not be applied: order %2 not found as an open Sales Order. The order may have been posted, archived, or deleted before this import ran.',
+                            LabelTxt, PeekedOrderNo)
+                    else
+                        ErrorMessage := StrSubstNo(
+                            '%1 confirmation could not be applied: no matching Sales Order was updated by this import.',
+                            LabelTxt);
+                end;
+            end;
+        end;
+
+        if EffectiveSuccess then
             NewFileName := BuildRenamedFileName(FileName, ImportedSuffixTok)
         else
             NewFileName := BuildRenamedFileName(FileName, '_error');
@@ -782,13 +884,13 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
             if not RenameFile('3PL', Setup."SharePoint Import Folder", FileName, NewFileName) then
                 LogMoveFailure(FileName, Graph.GetLastError());
 
-        if Success then
+        if EffectiveSuccess then
             LogFileImported(FileName, NewFileName, LabelTxt)
         else
             LogFileImportFailed(FileName, NewFileName, ErrorMessage, LabelTxt);
 
         ArchiveLog(
-            Success,
+            EffectiveSuccess,
             "3PL Log Direction"::Import,
             '',
             '',
@@ -799,7 +901,21 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
             Setup."SharePoint Import Folder"
         );
 
-        exit(Success);
+        exit(EffectiveSuccess);
+    end;
+
+    [TryFunction]
+    local procedure TryRunPickXmlPort(var PickXmlPort: XmlPort "Import Pick Confirmation_AU"; InS: InStream)
+    begin
+        PickXmlPort.SetSource(InS);
+        PickXmlPort.Import();
+    end;
+
+    [TryFunction]
+    local procedure TryRunShipXmlPort(var ShipXmlPort: XmlPort "Import Shipped Confirmation_AU"; InS: InStream)
+    begin
+        ShipXmlPort.SetSource(InS);
+        ShipXmlPort.Import();
     end;
 
 
@@ -1529,7 +1645,7 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
             TelemetryScope::ExtensionPublisher, Dims);
     end;
 
-    local procedure LogProcessAllSummary(Total: Integer; Picks: Integer; Shipments: Integer; Other: Integer; AlreadyProcessedSkipped: Integer; PicksSkippedDuplicate: Integer; ShipsDeferredAwaitingPick: Integer)
+    local procedure LogProcessAllSummary(Total: Integer; Picks: Integer; Shipments: Integer; Other: Integer; AlreadyProcessedSkipped: Integer; PicksSkippedDuplicate: Integer; ShipsDeferredAwaitingPick: Integer; ShipsRejectedNoOrder: Integer)
     var
         Dims: Dictionary of [Text, Text];
     begin
@@ -1541,6 +1657,7 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
         Dims.Add('skipped', Format(AlreadyProcessedSkipped));
         Dims.Add('picksSkippedDuplicate', Format(PicksSkippedDuplicate));
         Dims.Add('shipsDeferredAwaitingPick', Format(ShipsDeferredAwaitingPick));
+        Dims.Add('shipsRejectedNoOrder', Format(ShipsRejectedNoOrder));
         Session.LogMessage('3PL-PROCESS-ALL', 'ProcessAll completed',
             Verbosity::Normal, DataClassification::SystemMetadata,
             TelemetryScope::ExtensionPublisher, Dims);
