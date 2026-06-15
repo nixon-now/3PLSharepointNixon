@@ -88,8 +88,8 @@ xmlport 50440 "Import Shipped Confirmation_AU"
     trigger OnPostXmlPort()
     begin
         if GuiAllowed then Window.Close();
-        if not SuppressMessages then
-            Message('Imported %1 shipment confirmation(s). Skipped %2.', ShipmentCount, ShipmentSkipCount);
+        if ShipmentCount = 0 then
+            Error('Shipment confirmation for order %1 could not be applied: order not found as an open Sales Order. The order may have been posted, archived, or deleted before this import ran.', XmlOrderNo);
     end;
 
     local procedure ProcessOrder()
@@ -137,6 +137,7 @@ xmlport 50440 "Import Shipped Confirmation_AU"
         SalesHeader."Imported Shipped Conf. Date" := Today;
         SalesHeader."3PL Imported" := true;
         SalesHeader."3PL Import Date" := Today;
+        SalesHeader."Shipment Date" := SalesHeader."Posting Date";
 
         if not SalesHeader.Modify(true) then begin
             ShipmentSkipCount += 1;

@@ -468,6 +468,7 @@ codeunit 50402 "SharePoint Graph Connector"
         ParentRef: JsonObject;
         JsonAsText: Text;
         Headers: HttpHeaders;
+        ContentHeaders: HttpHeaders;
         SrcNorm: Text;
         DstNorm: Text;
         FilePath: Text;
@@ -495,8 +496,11 @@ codeunit 50402 "SharePoint Graph Connector"
         PatchBody.WriteTo(JsonAsText);
 
         Request.GetHeaders(Headers);
-        Headers.Add('Content-Type', 'application/json');
         Request.Content().WriteFrom(JsonAsText);
+        Request.Content().GetHeaders(ContentHeaders);
+        if ContentHeaders.Contains('Content-Type') then
+            ContentHeaders.Remove('Content-Type');
+        ContentHeaders.Add('Content-Type', 'application/json');
 
         if not ExecuteWithRetry(Request, Response, 3) then
             exit(false);

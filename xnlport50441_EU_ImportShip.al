@@ -76,7 +76,7 @@ xmlport 50441 "Import Shipped Confirmation_EU"
             exit;
 
         if not SalesHeader.Get(SalesHeader."Document Type"::Order, OrderNo) then
-            exit; // silently skip unknown orders
+            Error('Shipment confirmation for order %1 could not be applied: order not found as an open Sales Order. The order may have been posted, archived, or deleted before this import ran.', OrderNo);
 
         // Map carrier to agent code (exact code > name match)
         ShipAgentCode := '';
@@ -117,6 +117,7 @@ xmlport 50441 "Import Shipped Confirmation_EU"
         SalesHeader."3PL Imported" := true;
         SalesHeader."3PL Import Date" := Today;
         SalesHeader."Posting Date" := WorkDate();
+        SalesHeader."Shipment Date" := SalesHeader."Posting Date";
         SalesHeader.Modify();
     end;
 }
