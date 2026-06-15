@@ -44,11 +44,13 @@ xmlport 50442 "Import SRO Confirmation_EU"
                                 GotSHeader := true;
                                 ReceiptCount += 1;
                                 SalesHeader := LocalSalesHeader;
+                                SalesHeader."3PL SRO Requires Review" := false;
+                                SalesHeader."3PL SRO Review Reason" := '';
 
                                 if GuiAllowed then
                                     Window.Update(1, DocNo);
                             end else begin
-                                LogError(StrSubstNo('Return Order %1 not found.', DocNo));
+                                Logic.LogError(StrSubstNo('Return Order %1 not found.', DocNo));
                                 ReceiptSkipCount += 1;
                             end;
                         end;
@@ -131,6 +133,9 @@ xmlport 50442 "Import SRO Confirmation_EU"
                             begin
                                 LineFound := false;
                                 ItemNoTxt := item;
+                                Clear(XmlReceivedQty);
+                                Clear(XmlReceivedQtyValid);
+                                Clear(XmlLineLocation);
 
                                 if not GotSHeader then
                                     exit;
@@ -144,9 +149,6 @@ xmlport 50442 "Import SRO Confirmation_EU"
                                 SalesLine.SetRange("No.", ItemNoTxt);
 
                                 LineFound := SalesLine.FindFirst();
-
-                                if not LineFound then
-                                    LogError(StrSubstNo('No Return Order line for Item %1 on %2.', ItemNoTxt, SalesHeader."No."));
                             end;
                         }
 
@@ -158,7 +160,7 @@ xmlport 50442 "Import SRO Confirmation_EU"
                                 if LineFound or (gtin = '') or (not GotSHeader) or Cancellation then
                                     exit;
 
-                                MapLineByGTIN(gtin);
+                                Logic.MapLineByGTIN(SalesHeader, SalesLine, gtin, LineFound);
                             end;
                         }
 
@@ -167,30 +169,38 @@ xmlport 50442 "Import SRO Confirmation_EU"
                         textelement(description) { }
                         textelement(on_order) { }
 
-                        // <received_qty> — maps to Return Qty. to Receive + Qty. to Invoice
                         textelement(received_qty)
                         {
                             trigger OnAfterAssignVariable()
-                            var
-                                QtyReceived: Decimal;
                             begin
                                 if (not GotSHeader) or Cancellation then
                                     exit;
 
-                                if Evaluate(QtyReceived, received_qty) then
-                                    ApplyReceivedQuantity(QtyReceived);
+                                XmlReceivedQtyValid := Evaluate(XmlReceivedQty, received_qty);
                             end;
                         }
 
                         textelement(line_location)
                         {
                             XmlName = 'location';
+                            trigger OnAfterAssignVariable()
+                            begin
+                                XmlLineLocation := CopyStr(DelChr(line_location, '<>=', ' '), 1, MaxStrLen(XmlLineLocation));
+                            end;
                         }
 
                         trigger OnBeforeInsertRecord()
                         begin
                             LineCounter += 1;
                             LineRec.Number := LineCounter;
+
+                            if (not GotSHeader) or Cancellation then
+                                exit;
+
+                            if LineFound then
+                                Logic.ApplyToExistingLine(SalesHeader, SalesLine, XmlReceivedQty, XmlReceivedQtyValid, XmlLineLocation)
+                            else
+                                Logic.HandleUnexpectedLine(SalesHeader, ItemNoTxt, XmlReceivedQty, XmlReceivedQtyValid, XmlLineLocation);
                         end;
                     }
                 }
@@ -245,68 +255,23 @@ xmlport 50442 "Import SRO Confirmation_EU"
     var
         SalesHeader: Record "Sales Header";
         SalesLine: Record "Sales Line";
-        ItemRef: Record "Item Reference";
+        Logic: Codeunit "3PL SRO Import Logic";
 
         DocNo: Code[20];
         ReceiptNoTxt: Text;
         ItemNoTxt: Text;
+        XmlLineLocation: Code[10];
+        XmlReceivedQty: Decimal;
         Window: Dialog;
         SuppressMessages: Boolean;
         GuiAllowed: Boolean;
         GotSHeader: Boolean;
         LineFound: Boolean;
         Cancellation: Boolean;
+        XmlReceivedQtyValid: Boolean;
         ReceiptCount: Integer;
         ReceiptSkipCount: Integer;
         LineCounter: Integer;
-
-    local procedure MapLineByGTIN(GTINVal: Text)
-    begin
-        if GTINVal = '' then
-            exit;
-
-        ItemRef.Reset();
-        ItemRef.SetRange("Reference No.", GTINVal);
-        ItemRef.SetRange("Reference Type", ItemRef."Reference Type"::"Bar Code");
-        if ItemRef.FindFirst() then begin
-            SalesLine.Reset();
-            SalesLine.SetRange("Document Type", SalesHeader."Document Type");
-            SalesLine.SetRange("Document No.", SalesHeader."No.");
-            SalesLine.SetRange(Type, SalesLine.Type::Item);
-            SalesLine.SetRange("No.", ItemRef."Item No.");
-            if ItemRef."Variant Code" <> '' then
-                SalesLine.SetRange("Variant Code", ItemRef."Variant Code");
-
-            LineFound := SalesLine.FindFirst();
-            if not LineFound then
-                LogError(StrSubstNo('No Return Order line via GTIN %1 for %2.', GTINVal, SalesHeader."No."));
-        end else
-            LogError(StrSubstNo('GTIN %1 not found in Item Reference.', GTINVal));
-    end;
-
-    local procedure ApplyReceivedQuantity(QtyReceived: Decimal)
-    begin
-        if not LineFound then
-            exit;
-
-        // Guard against over-receive: cap at Outstanding Quantity
-        if QtyReceived > SalesLine."Outstanding Quantity" then
-            QtyReceived := SalesLine."Outstanding Quantity";
-
-        SalesLine.Validate("Return Qty. to Receive", QtyReceived);
-        SalesLine.Validate("Qty. to Invoice", QtyReceived);
-        SalesLine.Modify();
-    end;
-
-    local procedure LogError(Msg: Text)
-    var
-        Dims: Dictionary of [Text, Text];
-    begin
-        Dims.Add('error', CopyStr(Msg, 1, 250));
-        Session.LogMessage('3PL-SRO-IMP', 'SRO import issue',
-            Verbosity::Warning, DataClassification::SystemMetadata,
-            TelemetryScope::ExtensionPublisher, Dims);
-    end;
 
     procedure SetSuppressMessages(NewSuppressMessages: Boolean)
     begin

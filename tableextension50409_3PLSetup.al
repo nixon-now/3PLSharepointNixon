@@ -32,5 +32,10 @@ tableextension 50409 "3PL Setup Ext" extends "SharePoint Setup"
             Caption = 'Import SRO XMLport ID';
             ToolTip = 'Object ID used for importing return receipt confirmations from 3PL.';
         }
+        field(50006; "SRO Auto-Post Disabled"; Boolean)
+        {
+            Caption = 'SRO Auto-Post Disabled';
+            ToolTip = 'When enabled, the auto-post sweep still runs and marks each SRO as attempted, but does not call Sales-Post. Use for sandbox testing.';
+        }
     }
 }

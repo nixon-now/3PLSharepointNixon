@@ -168,6 +168,24 @@ tableextension 50450 "Sales Header 3PL" extends "Sales Header"
             DataClassification = CustomerContent;
             Caption = '3PL Skipped';
         }
+        field(50477; "3PL SRO Requires Review"; Boolean)
+        {
+            DataClassification = CustomerContent;
+            Caption = '3PL SRO Requires Review';
+            Editable = false;
+        }
+        field(50478; "3PL SRO Auto-Post Attempted"; Boolean)
+        {
+            DataClassification = CustomerContent;
+            Caption = '3PL SRO Auto-Post Attempted';
+            Editable = false;
+        }
+        field(50479; "3PL SRO Review Reason"; Text[2048])
+        {
+            DataClassification = CustomerContent;
+            Caption = '3PL SRO Review Reason';
+            Editable = false;
+        }
 
     }
 
@@ -188,6 +206,9 @@ tableextension 50450 "Sales Header 3PL" extends "Sales Header"
         "Imported SRO Confirmation" := false;
         "Imported SRO Conf. Date" := 0D;
         "3PL SRO Reception No." := '';
+        "3PL SRO Requires Review" := false;
+        "3PL SRO Auto-Post Attempted" := false;
+        "3PL SRO Review Reason" := '';
 
         if "3PL Prep Code" = '' then begin
             DefaultPrepCode := GetDefault3PLPrepCode();
@@ -211,6 +232,9 @@ tableextension 50450 "Sales Header 3PL" extends "Sales Header"
         "Imported SRO Confirmation" := false;
         "Imported SRO Conf. Date" := 0D;
         "3PL SRO Reception No." := '';
+        "3PL SRO Requires Review" := false;
+        "3PL SRO Auto-Post Attempted" := false;
+        "3PL SRO Review Reason" := '';
     end;
 
     procedure Reset3PLFields()
@@ -228,6 +252,9 @@ tableextension 50450 "Sales Header 3PL" extends "Sales Header"
         "Imported SRO Confirmation" := false;
         "Imported SRO Conf. Date" := 0D;
         "3PL SRO Reception No." := '';
+        "3PL SRO Requires Review" := false;
+        "3PL SRO Auto-Post Attempted" := false;
+        "3PL SRO Review Reason" := '';
         Modify();
     end;
 
@@ -254,6 +281,37 @@ tableextension 50450 "Sales Header 3PL" extends "Sales Header"
         "Imported Shipped Conf. Date" := 0D;
         RefreshImported3PLFlag();
         Modify();
+    end;
+
+    procedure ClearSROExport3PLFields()
+    begin
+        "3PL SRO Exported" := false;
+        "3PL SRO Export Date" := 0D;
+        Modify();
+    end;
+
+    procedure ClearSROConfirmation3PLFields()
+    begin
+        "Imported SRO Confirmation" := false;
+        "Imported SRO Conf. Date" := 0D;
+        "3PL SRO Reception No." := '';
+        "3PL SRO Requires Review" := false;
+        "3PL SRO Auto-Post Attempted" := false;
+        "3PL SRO Review Reason" := '';
+        RefreshImported3PLFlag();
+        Modify();
+    end;
+
+    procedure ClearSROReviewFlag()
+    begin
+        "3PL SRO Requires Review" := false;
+        "3PL SRO Review Reason" := '';
+        Modify();
+    end;
+
+    procedure Set3PLSRORequiresReview()
+    begin
+        "3PL SRO Requires Review" := true;
     end;
 
     local procedure RefreshImported3PLFlag()

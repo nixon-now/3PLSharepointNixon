@@ -1959,10 +1959,11 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
     procedure ImportSROForOrder(ReturnOrderNo: Code[20]): Boolean
     var
         SROFileName: Text;
+        DummyBlob: Codeunit "Temp Blob";
     begin
         if not FirstSROFileForOrder(ReturnOrderNo, SROFileName) then
             exit(false);
-        exit(ImportSROConfirmationFromSharePoint(SROFileName));
+        exit(TryImportSROConfirmation(SROFileName, false, DummyBlob));
     end;
 
     local procedure TryImportSROConfirmation(FileName: Text; UseProvidedBlob: Boolean; var ProvidedBlob: Codeunit "Temp Blob"): Boolean
@@ -2015,13 +2016,23 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
             Setup."SharePoint Import Folder"
         );
 
+        if Success then
+            SweepAutoPostSROs();
+
         exit(Success);
     end;
 
     [TryFunction]
     local procedure ImportSROConfirmationFromSharePoint_Try(FileName: Text)
+    var
+        InnerErr: Text;
     begin
-        ImportSROConfirmationFromSharePoint(FileName);
+        if not ImportSROConfirmationFromSharePoint(FileName) then begin
+            InnerErr := GetLastErrorText();
+            if InnerErr = '' then
+                InnerErr := 'SRO XMLport import returned failure with no error details.';
+            Error(InnerErr);
+        end;
     end;
 
     local procedure ImportSROConfirmationFromSharePoint(FileName: Text): Boolean
@@ -2073,6 +2084,8 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
         NameLower: Text;
         OrderLower: Text;
     begin
+        if IsAlreadyProcessed(FileName) then
+            exit(false);
         if not EndsWithXml(FileName) then
             exit(false);
 
@@ -2107,5 +2120,81 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
         Session.LogMessage('3PL-SRO-EXPORT-FAIL', 'Return Order export failed',
             Verbosity::Error, DataClassification::SystemMetadata,
             TelemetryScope::ExtensionPublisher, Dims);
+    end;
+
+    local procedure SweepAutoPostSROs()
+    var
+        SalesHeader: Record "Sales Header";
+        Dims: Dictionary of [Text, Text];
+        AutoPostDisabled: Boolean;
+    begin
+        if Setup.Get('3PL') then
+            AutoPostDisabled := Setup."SRO Auto-Post Disabled";
+
+        SalesHeader.SetRange("Document Type", SalesHeader."Document Type"::"Return Order");
+        SalesHeader.SetRange("Imported SRO Confirmation", true);
+        SalesHeader.SetRange("Imported SRO Conf. Date", Today);
+        SalesHeader.SetRange("3PL SRO Requires Review", false);
+        SalesHeader.SetRange("3PL SRO Auto-Post Attempted", false);
+        SalesHeader.SetRange(Status, SalesHeader.Status::Released);
+
+        if not SalesHeader.FindSet() then
+            exit;
+
+        repeat
+            if AutoPostDisabled then begin
+                Clear(Dims);
+                Dims.Add('orderNo', SalesHeader."No.");
+                Dims.Add('loopReturnId', SalesHeader."Loop Return ID");
+                Dims.Add('wouldInvoice', Format(SalesHeader."Loop Return ID" = ''));
+                Session.LogMessage('3PL-SRO-AUTOPOST-SKIPPED', 'SRO auto-post skipped (disabled in setup)',
+                    Verbosity::Normal, DataClassification::SystemMetadata,
+                    TelemetryScope::ExtensionPublisher, Dims);
+            end else
+                if not TryAutoPostSingleSRO(SalesHeader) then begin
+                    Clear(Dims);
+                    Dims.Add('orderNo', SalesHeader."No.");
+                    Dims.Add('error', CopyStr(GetLastErrorText(), 1, 250));
+                    Session.LogMessage('3PL-SRO-AUTOPOST-FAIL', 'SRO auto-post failed',
+                        Verbosity::Warning, DataClassification::SystemMetadata,
+                        TelemetryScope::ExtensionPublisher, Dims);
+                end;
+            MarkAutoPostAttempted(SalesHeader."No.");
+        until SalesHeader.Next() = 0;
+    end;
+
+    [TryFunction]
+    local procedure TryAutoPostSingleSRO(SalesHeaderToPost: Record "Sales Header")
+    var
+        SalesPost: Codeunit "Sales-Post";
+    begin
+        SalesHeaderToPost.Ship := false;
+        SalesHeaderToPost.Receive := true;
+        SalesHeaderToPost.Invoice := SalesHeaderToPost."Loop Return ID" = '';
+        SalesHeaderToPost.Modify();
+        Commit();
+
+        SalesPost.Run(SalesHeaderToPost);
+    end;
+
+    local procedure MarkAutoPostAttempted(OrderNo: Code[20])
+    var
+        SalesHeader: Record "Sales Header";
+    begin
+        if not SalesHeader.Get(SalesHeader."Document Type"::"Return Order", OrderNo) then
+            exit;
+        SalesHeader."3PL SRO Auto-Post Attempted" := true;
+        SalesHeader.Modify();
+    end;
+
+    [EventSubscriber(ObjectType::Codeunit, Codeunit::"Sales-Post", 'OnBeforePostSalesDoc', '', false, false)]
+    local procedure GuardSROPostingOnBeforePostSalesDoc(var SalesHeader: Record "Sales Header"; var IsHandled: Boolean)
+    begin
+        if SalesHeader."Document Type" <> SalesHeader."Document Type"::"Return Order" then
+            exit;
+        if not SalesHeader."3PL SRO Requires Review" then
+            exit;
+
+        Error('Cannot post Return Order %1: 3PL SRO discrepancies require review. Open the return order, review the discrepancy, and click "Clear 3PL Review Flag" before posting.', SalesHeader."No.");
     end;
 }

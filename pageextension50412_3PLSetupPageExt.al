@@ -12,6 +12,7 @@ pageextension 50412 "3PL Setup Ext Card" extends "SharePoint Setup"
                 field("Import Ship ID"; rec."Import Ship Xmlport ID") { ApplicationArea = All; }
                 field("Export SRO Xmlport ID"; Rec."Export SRO Xmlport ID") { ApplicationArea = All; }
                 field("Import SRO Xmlport ID"; Rec."Import SRO Xmlport ID") { ApplicationArea = All; }
+                field("SRO Auto-Post Disabled"; Rec."SRO Auto-Post Disabled") { ApplicationArea = All; }
             }
         }
     }
