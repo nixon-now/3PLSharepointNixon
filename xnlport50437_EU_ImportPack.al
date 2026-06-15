@@ -213,8 +213,8 @@ xmlport 50437 "Import Pack Confirmation_EU"
         if GuiAllowed then
             Window.Close();
 
-        if not SuppressMessages then
-            Message('Imported %1 pick confirmation(s). Skipped %2.', ShipmentCount, ShipmentSkipCount);
+        if ShipmentCount = 0 then
+            Error('Pick confirmation for order %1 could not be applied: order not found as an open Sales Order. The order may have been posted, archived, or deleted before this import ran.', DocNo);
     end;
 
     // ====== Globals ======
