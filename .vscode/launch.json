@@ -16,11 +16,11 @@
     "breakOnNext": "WebServiceClient"
   },
   {
-    "name": "US_Production_Copy",
+    "name": "EU_Sandbox_20260513",
     "type": "al",
     "request": "launch",
     "environmentType": "Sandbox",
-    "environmentName": "US_Production_Copy",
+    "environmentName": "EU_Sandbox_20260513",
     "tenant": "ff290f9e-157e-4ef3-a1e7-2390cdd63076",
     "startupObjectId": 22,
     "breakOnError": "All",
@@ -32,11 +32,11 @@
     "numberOfSqlStatements": 10
   },
    {
-    "name": "AU_Sandbox_20260508",
+    "name": "AU_Sandbox_20260520",
     "type": "al",
     "request": "launch",
     "environmentType": "Sandbox",
-    "environmentName": "AU_Sandbox_20260508",
+    "environmentName": "AU_Sandbox_20260520",
     "tenant": "ff290f9e-157e-4ef3-a1e7-2390cdd63076",
     "startupObjectId": 22,
     "breakOnError": "All",
