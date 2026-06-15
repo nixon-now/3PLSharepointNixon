@@ -224,8 +224,8 @@ xmlport 50443 "Import SRO Confirmation_AU"
         if GuiAllowed then
             Window.Close();
 
-        if not SuppressMessages then
-            Message('Imported %1 return receipt(s). Skipped %2.', ReceiptCount, ReceiptSkipCount);
+        if ReceiptCount = 0 then
+            Error('Return confirmation for receipt %1 could not be applied: no matching Return Order found in BC. The order may have been posted, archived, or deleted before this import ran.', ReceiptNoTxt);
     end;
 
 
