@@ -37,5 +37,13 @@ tableextension 50409 "3PL Setup Ext" extends "SharePoint Setup"
             Caption = 'SRO Auto-Post Disabled';
             ToolTip = 'When enabled, the auto-post sweep still runs and marks each SRO as attempted, but does not call Sales-Post. Use for sandbox testing.';
         }
+        field(50007; "Set Shipment Date On Ship Import"; Boolean)
+        {
+            Caption = 'Set Shipment Date On Ship Import';
+        }
+        field(50008; "Move Failed Files To Error Folder"; Boolean)
+        {
+            Caption = 'Move Failed Files To Error Folder';
+        }
     }
 }
