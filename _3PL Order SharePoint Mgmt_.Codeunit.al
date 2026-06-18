@@ -919,9 +919,6 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
         if not Setup.Get('3PL') then
             exit(false);
 
-        // Mirror IsPickFile: a configured prefix must match; an empty prefix is tolerated
-        // and detection falls back to the suffix tokens. This supports regions (e.g. EU)
-        // that identify ship files by suffix only ("_shipped") with no prefix configured.
         PrefixConfigured := Setup."Import Ship File Prefix" <> '';
         HasShipPrefix := true;
         if PrefixConfigured then
@@ -930,8 +927,6 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
             exit(false);
 
         if Setup."Import Ship File Suffix" = '' then
-            // Prefix-only gating: match when a prefix was configured and matched.
-            // If neither prefix nor suffix is configured, do not match (avoids matching everything).
             exit(PrefixConfigured);
 
         Suffixes := ParseSuffixTokens(Setup."Import Ship File Suffix");

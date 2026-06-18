@@ -133,7 +133,9 @@ pageextension 50411 "SalesOrderCard.3PLExport" extends "Sales Order"
             }
 
             // -----------------------------------------------------------------
+            // DEBUG/DEMO — Clear actions commented out for production.
             // -----------------------------------------------------------------
+            /*
             action(ClearExportFields3PL)
             {
                 ApplicationArea = All;
@@ -196,6 +198,7 @@ pageextension 50411 "SalesOrderCard.3PLExport" extends "Sales Order"
                     Message('Ship confirmation fields cleared on order %1.', Rec."No.");
                 end;
             }
+            */
 
             action(ListSharePointFilesDebug)
             {
@@ -239,9 +242,12 @@ pageextension 50411 "SalesOrderCard.3PLExport" extends "Sales Order"
                 actionref(Promoted_ExportCOD; ExportCODTo3PL) { }
                 actionref(Promoted_ImportPick; ImportPickForOrder) { }
                 actionref(Promoted_ImportShip; ImportShipForOrder) { }
+                // DEBUG/DEMO Clear refs commented out alongside their actions.
+                /*
                 actionref(Promoted_ClearExport; ClearExportFields3PL) { }
                 actionref(Promoted_ClearPick; ClearPickConfirmation3PL) { }
                 actionref(Promoted_ClearShip; ClearShipConfirmation3PL) { }
+                */
                 actionref(Promoted_ListFiles; ListSharePointFilesDebug) { }
             }
         }

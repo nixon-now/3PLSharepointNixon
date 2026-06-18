@@ -4,6 +4,10 @@ page 50498 "3PL Archive List"
     SourceTable = "3PL Archive";
     ApplicationArea = All;
     UsageCategory = Administration;
+    Editable = false;
+    InsertAllowed = false;
+    ModifyAllowed = false;
+    DeleteAllowed = false;
 
     // Add this property to set the default sort order
     SourceTableView = sorting("Entry No.") order(descending);
