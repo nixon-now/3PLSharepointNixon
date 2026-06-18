@@ -61,8 +61,10 @@ xmlport 50440 "Import Shipped Confirmation_AU"
                 // Process order after all elements are read
                 trigger OnAfterAssignVariable()
                 begin
-                    if (XmlOrderNo <> '') then
+                    if (XmlOrderNo <> '') then begin
+                        LastSeenOrderNo := XmlOrderNo;
                         ProcessOrder();
+                    end;
 
                     // Reset for next order
                     Clear(XmlOrderNo);
@@ -89,15 +91,15 @@ xmlport 50440 "Import Shipped Confirmation_AU"
     begin
         if GuiAllowed then Window.Close();
         if ShipmentCount = 0 then
-            Error('Shipment confirmation for order %1 could not be applied: order not found as an open Sales Order. The order may have been posted, archived, or deleted before this import ran.', XmlOrderNo);
+            Error('Shipment confirmation for order %1 could not be applied: order not found as an open Sales Order. The order may have been posted, archived, or deleted before this import ran.', LastSeenOrderNo);
     end;
 
     local procedure ProcessOrder()
     var
         SalesHeader: Record "Sales Header";
         ShippingAgent: Record "Shipping Agent";
-        ConfirmManagement: Codeunit "Confirm Management";
         IsHandled: Boolean;
+        AgentResolved: Boolean;
     begin
         if XmlOrderNo = '' then
             exit;
@@ -113,23 +115,14 @@ xmlport 50440 "Import Shipped Confirmation_AU"
             exit;
         end;
 
-        // Validate shipping agent exists
-        if XmlCourier <> '' then begin
-            if not ShippingAgent.Get(XmlCourier) then begin
-                if GuiAllowed and not SuppressMessages then
-                    if ConfirmManagement.GetResponseOrDefault(
-                        StrSubstNo('Shipping agent %1 does not exist. Continue?', XmlCourier), true)
-                    then
-                        ShippingAgent.Init()
-                    else begin
-                        ShipmentSkipCount += 1;
-                        exit;
-                    end;
-            end;
-        end;
+        // Resolve shipping agent. Only assign Shipping Agent Code when the agent is configured in BC.
+        // Unknown carriers are logged as a telemetry warning; tracking still imports.
+        AgentResolved := (XmlCourier <> '') and ShippingAgent.Get(XmlCourier);
+        if (XmlCourier <> '') and not AgentResolved then
+            LogError('UnknownCarrier', XmlOrderNo, StrSubstNo('Shipping agent %1 not configured in BC; tracking will be saved but agent code skipped.', XmlCourier));
 
-        if XmlCourier <> '' then
-            SalesHeader."Shipping Agent Code" := CopyStr(XmlCourier, 1, MaxStrLen(SalesHeader."Shipping Agent Code"));
+        if AgentResolved then
+            SalesHeader."Shipping Agent Code" := ShippingAgent.Code;
         if XmlTrackingNo <> '' then
             SalesHeader."Package Tracking No." := CopyStr(XmlTrackingNo, 1, MaxStrLen(SalesHeader."Package Tracking No."));
 
@@ -175,6 +168,7 @@ xmlport 50440 "Import Shipped Confirmation_AU"
 
     var
         XmlOrderNo: Code[20];
+        LastSeenOrderNo: Code[20];
         XmlCourier: Text[20];
         XmlTrackingNo: Text[50];
         ShipmentCount: Integer;

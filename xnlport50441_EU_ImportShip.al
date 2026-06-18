@@ -54,6 +54,7 @@ xmlport 50441 "Import Shipped Confirmation_EU"
         SalesHeader: Record "Sales Header";
         Agent: Record "Shipping Agent";
         AgentService: Record "Shipping Agent Services";
+        Setup: Record "SharePoint Setup";
         ShipAgentCode: Code[10];
         ShipServiceCode: Code[10];
         TrackingNoTxt: Text;
@@ -117,7 +118,8 @@ xmlport 50441 "Import Shipped Confirmation_EU"
         SalesHeader."3PL Imported" := true;
         SalesHeader."3PL Import Date" := Today;
         SalesHeader."Posting Date" := WorkDate();
-        SalesHeader."Shipment Date" := SalesHeader."Posting Date";
+        if Setup.Get('3PL') and Setup."Set Shipment Date On Ship Import" then
+            SalesHeader."Shipment Date" := SalesHeader."Posting Date";
         SalesHeader.Modify();
     end;
 }
