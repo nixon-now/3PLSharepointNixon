@@ -417,6 +417,7 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
         AlreadyProcessedCount: Integer;
         PickSkippedAlreadyAppliedCount: Integer;
         ShipDeferredAwaitingPickCount: Integer;
+        ErrorCount: Integer;
         PeekedOrderNo: Code[20];
         Msg: Text;
         DummyBlob: Codeunit "Temp Blob";
@@ -463,8 +464,9 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
                     PickSkippedAlreadyAppliedCount += 1;
                     continue;
                 end;
-            TryImportConfirmation(FileName, "3PL Import Type"::Pick);
             PickCount += 1;
+            if not TryImportConfirmation(FileName, "3PL Import Type"::Pick) then
+                ErrorCount += 1;
         end;
 
         foreach FileName in ShipFiles do begin
@@ -475,21 +477,23 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
                     ShipDeferredAwaitingPickCount += 1;
                     continue;
                 end;
-            TryImportConfirmation(FileName, "3PL Import Type"::Ship);
             ShipCount += 1;
+            if not TryImportConfirmation(FileName, "3PL Import Type"::Ship) then
+                ErrorCount += 1;
         end;
 
         foreach FileName in SROFiles do begin
-            TryImportSROConfirmation(FileName, false, DummyBlob);
             SROCount += 1;
+            if not TryImportSROConfirmation(FileName, false, DummyBlob) then
+                ErrorCount += 1;
         end;
 
         Total := FileNames.Count();
         LogProcessAllSummary(Total, PickCount, ShipCount, SROCount, OtherCount, AlreadyProcessedCount,
             PickSkippedAlreadyAppliedCount, ShipDeferredAwaitingPickCount);
         Msg := StrSubstNo(
-            '%1 file(s) processed. Picks=%2 (skipped %3 already-applied), Shipments=%4 (deferred %5 awaiting pick), Returns=%6, Other=%7, Already-imported skipped=%8',
-            Total, PickCount, PickSkippedAlreadyAppliedCount, ShipCount, ShipDeferredAwaitingPickCount,
+            '%1 file(s) processed. Errors=%2 (open the 3PL Archive for details). Picks=%3 (skipped %4 already-applied), Shipments=%5 (deferred %6 awaiting pick), Returns=%7, Unrecognized=%8, Already-imported skipped=%9',
+            Total, ErrorCount, PickCount, PickSkippedAlreadyAppliedCount, ShipCount, ShipDeferredAwaitingPickCount,
             SROCount, OtherCount, AlreadyProcessedCount);
         if GuiAllowed then
             Message(Msg);
@@ -896,6 +900,7 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
         NameLen: Integer;
         DotXmlPos: Integer;
         HasShipPrefix: Boolean;
+        PrefixConfigured: Boolean;
         Suffixes: List of [Text];
         Token: Text;
     begin
@@ -914,17 +919,25 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
         if not Setup.Get('3PL') then
             exit(false);
 
-        HasShipPrefix := (Setup."Import Ship File Prefix" <> '') and
-                         StartsWithIgnoreCase(FileName, Setup."Import Ship File Prefix");
+        // Mirror IsPickFile: a configured prefix must match; an empty prefix is tolerated
+        // and detection falls back to the suffix tokens. This supports regions (e.g. EU)
+        // that identify ship files by suffix only ("_shipped") with no prefix configured.
+        PrefixConfigured := Setup."Import Ship File Prefix" <> '';
+        HasShipPrefix := true;
+        if PrefixConfigured then
+            HasShipPrefix := StartsWithIgnoreCase(FileName, Setup."Import Ship File Prefix");
+        if not HasShipPrefix then
+            exit(false);
 
-        if HasShipPrefix then begin
-            if Setup."Import Ship File Suffix" = '' then
+        if Setup."Import Ship File Suffix" = '' then
+            // Prefix-only gating: match when a prefix was configured and matched.
+            // If neither prefix nor suffix is configured, do not match (avoids matching everything).
+            exit(PrefixConfigured);
+
+        Suffixes := ParseSuffixTokens(Setup."Import Ship File Suffix");
+        foreach Token in Suffixes do
+            if (StrPos(NameLower, Token) > 0) and (StrPos(NameLower, Token) < DotXmlPos) then
                 exit(true);
-            Suffixes := ParseSuffixTokens(Setup."Import Ship File Suffix");
-            foreach Token in Suffixes do
-                if (StrPos(NameLower, Token) > 0) and (StrPos(NameLower, Token) < DotXmlPos) then
-                    exit(true);
-        end;
 
         exit(false);
     end;
@@ -1208,6 +1221,8 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
 
     local procedure MoveToErrorFolder(FileName: Text)
     begin
+        if not Setup."Move Failed Files To Error Folder" then
+            exit;
         if Setup."SharePoint Error Folder" = '' then
             exit;
         if not Graph.MoveFile('3PL', Setup."SharePoint Import Folder", FileName, Setup."SharePoint Error Folder") then
