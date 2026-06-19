@@ -2,7 +2,7 @@
   "id": "9b5b312c-0c2e-463b-9be7-b727e2c8e504",
   "name": "3PL_SharePoint_Nixon",
   "publisher": "SHN",
-  "version": "1.0.6.8",
+  "version": "1.0.6.9",
   "runtime": "15.0",
   "target": "Cloud",
   "application": "26.0.0.0",
@@ -24,6 +24,12 @@
       "name": "Shopify Connector",
       "publisher": "Microsoft",
       "version": "27.5.46862.47835"
+    },
+    {
+      "id": "7c9f9da3-96a3-49ad-bd95-1e8e899cc442",
+      "name": "ShopifyReturn",
+      "publisher": "SHN",
+      "version": "1.0.4.9"
     }
   ],
   "idRanges": [
