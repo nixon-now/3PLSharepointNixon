@@ -1,4 +1,4 @@
-﻿
+
 codeunit 50400 "3PL Order SharePoint Mgmt"
 {
     SingleInstance = false;
@@ -407,16 +407,20 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
         FileNames: List of [Text];
         PickFiles: List of [Text];
         ShipFiles: List of [Text];
+        SROFiles: List of [Text];
         FileName: Text;
         Total: Integer;
         PickCount: Integer;
         ShipCount: Integer;
+        SROCount: Integer;
         OtherCount: Integer;
         AlreadyProcessedCount: Integer;
         PickSkippedAlreadyAppliedCount: Integer;
         ShipDeferredAwaitingPickCount: Integer;
+        ErrorCount: Integer;
         PeekedOrderNo: Code[20];
         Msg: Text;
+        DummyBlob: Codeunit "Temp Blob";
     begin
         if not CheckSetup() then exit;
         if Setup."SharePoint Import Folder" = '' then begin
@@ -441,6 +445,8 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
                     PickFiles.Add(FileName);
                 IsShipFile(FileName):
                     ShipFiles.Add(FileName);
+                IsSROFile(FileName):
+                    SROFiles.Add(FileName);
                 else begin
                     ArchiveLog(false, "3PL Log Direction"::Import, '', '', FileName,
                         Setup, "3PL Archive Step"::ImportConfirmation,
@@ -458,8 +464,9 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
                     PickSkippedAlreadyAppliedCount += 1;
                     continue;
                 end;
-            TryImportConfirmation(FileName, "3PL Import Type"::Pick);
             PickCount += 1;
+            if not TryImportConfirmation(FileName, "3PL Import Type"::Pick) then
+                ErrorCount += 1;
         end;
 
         foreach FileName in ShipFiles do begin
@@ -470,17 +477,24 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
                     ShipDeferredAwaitingPickCount += 1;
                     continue;
                 end;
-            TryImportConfirmation(FileName, "3PL Import Type"::Ship);
             ShipCount += 1;
+            if not TryImportConfirmation(FileName, "3PL Import Type"::Ship) then
+                ErrorCount += 1;
+        end;
+
+        foreach FileName in SROFiles do begin
+            SROCount += 1;
+            if not TryImportSROConfirmation(FileName, false, DummyBlob) then
+                ErrorCount += 1;
         end;
 
         Total := FileNames.Count();
-        LogProcessAllSummary(Total, PickCount, ShipCount, OtherCount, AlreadyProcessedCount,
+        LogProcessAllSummary(Total, PickCount, ShipCount, SROCount, OtherCount, AlreadyProcessedCount,
             PickSkippedAlreadyAppliedCount, ShipDeferredAwaitingPickCount);
         Msg := StrSubstNo(
-            '%1 file(s) processed. Picks=%2 (skipped %3 already-applied), Shipments=%4 (deferred %5 awaiting pick), Other=%6, Already-imported skipped=%7',
-            Total, PickCount, PickSkippedAlreadyAppliedCount, ShipCount, ShipDeferredAwaitingPickCount,
-            OtherCount, AlreadyProcessedCount);
+            '%1 file(s) processed. Errors=%2 (open the 3PL Archive for details). Picks=%3 (skipped %4 already-applied), Shipments=%5 (deferred %6 awaiting pick), Returns=%7, Unrecognized=%8, Already-imported skipped=%9',
+            Total, ErrorCount, PickCount, PickSkippedAlreadyAppliedCount, ShipCount, ShipDeferredAwaitingPickCount,
+            SROCount, OtherCount, AlreadyProcessedCount);
         if GuiAllowed then
             Message(Msg);
     end;
@@ -886,6 +900,7 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
         NameLen: Integer;
         DotXmlPos: Integer;
         HasShipPrefix: Boolean;
+        PrefixConfigured: Boolean;
         Suffixes: List of [Text];
         Token: Text;
     begin
@@ -904,17 +919,20 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
         if not Setup.Get('3PL') then
             exit(false);
 
-        HasShipPrefix := (Setup."Import Ship File Prefix" <> '') and
-                         StartsWithIgnoreCase(FileName, Setup."Import Ship File Prefix");
+        PrefixConfigured := Setup."Import Ship File Prefix" <> '';
+        HasShipPrefix := true;
+        if PrefixConfigured then
+            HasShipPrefix := StartsWithIgnoreCase(FileName, Setup."Import Ship File Prefix");
+        if not HasShipPrefix then
+            exit(false);
 
-        if HasShipPrefix then begin
-            if Setup."Import Ship File Suffix" = '' then
+        if Setup."Import Ship File Suffix" = '' then
+            exit(PrefixConfigured);
+
+        Suffixes := ParseSuffixTokens(Setup."Import Ship File Suffix");
+        foreach Token in Suffixes do
+            if (StrPos(NameLower, Token) > 0) and (StrPos(NameLower, Token) < DotXmlPos) then
                 exit(true);
-            Suffixes := ParseSuffixTokens(Setup."Import Ship File Suffix");
-            foreach Token in Suffixes do
-                if (StrPos(NameLower, Token) > 0) and (StrPos(NameLower, Token) < DotXmlPos) then
-                    exit(true);
-        end;
 
         exit(false);
     end;
@@ -1198,6 +1216,8 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
 
     local procedure MoveToErrorFolder(FileName: Text)
     begin
+        if not Setup."Move Failed Files To Error Folder" then
+            exit;
         if Setup."SharePoint Error Folder" = '' then
             exit;
         if not Graph.MoveFile('3PL', Setup."SharePoint Import Folder", FileName, Setup."SharePoint Error Folder") then
@@ -1558,7 +1578,7 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
             TelemetryScope::ExtensionPublisher, Dims);
     end;
 
-    local procedure LogProcessAllSummary(Total: Integer; Picks: Integer; Shipments: Integer; Other: Integer; AlreadyProcessedSkipped: Integer; PicksSkippedDuplicate: Integer; ShipsDeferredAwaitingPick: Integer)
+    local procedure LogProcessAllSummary(Total: Integer; Picks: Integer; Shipments: Integer; Returns: Integer; Other: Integer; AlreadyProcessedSkipped: Integer; PicksSkippedDuplicate: Integer; ShipsDeferredAwaitingPick: Integer)
     var
         Dims: Dictionary of [Text, Text];
     begin
@@ -1566,6 +1586,7 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
         Dims.Add('total', Format(Total));
         Dims.Add('picks', Format(Picks));
         Dims.Add('shipments', Format(Shipments));
+        Dims.Add('returns', Format(Returns));
         Dims.Add('other', Format(Other));
         Dims.Add('skipped', Format(AlreadyProcessedSkipped));
         Dims.Add('picksSkippedDuplicate', Format(PicksSkippedDuplicate));
@@ -1634,5 +1655,556 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
 
         A."Error Message" := CopyStr(ErrMsg, 1, MaxStrLen(A."Error Message"));
         exit(A.Insert(true));
+    end;
+
+    // =========================================================================
+    // SRO (Sales Return Order) Export Functions
+    // =========================================================================
+
+    local procedure AlreadySROExported(OrderNo: Code[20]): Boolean
+    var
+        SalesHeader: Record "Sales Header";
+    begin
+        if not SalesHeader.Get(SalesHeader."Document Type"::"Return Order", OrderNo) then
+            exit(false);
+        exit(SalesHeader."3PL SRO Exported");
+    end;
+
+    procedure ExportSROToSharePoint(var InSalesHeader: Record "Sales Header"; SkipSharePointUpload: Boolean; var OutBlob: Codeunit "Temp Blob")
+    var
+        Err: Text;
+    begin
+        if not CheckSetup() then exit;
+
+        if AlreadySROExported(InSalesHeader."No.") then begin
+            LogExportSkipped(InSalesHeader."No.", 'SRO already exported');
+            if GuiAllowed then
+                Message('Return Order %1 was already exported previously.', InSalesHeader."No.");
+            exit;
+        end;
+
+        if TryExportSRO(InSalesHeader, OutBlob, Err, SkipSharePointUpload) then begin
+            LogSROExportSuccess(InSalesHeader."No.");
+            if GuiAllowed and not SkipSharePointUpload then
+                Message('Return Order %1 (External Doc. No. %2) has been successfully exported to SharePoint.',
+                    InSalesHeader."No.", InSalesHeader."External Document No.");
+        end else begin
+            LogSROExportFailure(InSalesHeader."No.", Err);
+            if GuiAllowed then
+                Error('Failed to export Return Order %1: %2', InSalesHeader."No.", Err);
+        end;
+    end;
+
+    procedure ExportAllSalesReturnOrders(SelectionFilter: Text)
+    var
+        SalesHeader: Record "Sales Header";
+        TempBlob: Codeunit "Temp Blob";
+        SuccessCount: Integer;
+        ErrorCount: Integer;
+        SkippedCount: Integer;
+        Err: Text;
+    begin
+        if not CheckSetup() then exit;
+
+        if SelectionFilter <> '' then begin
+            ExportSelectedSROs(SelectionFilter);
+            exit;
+        end;
+
+        SalesHeader.Reset();
+        SalesHeader.SetRange("Document Type", SalesHeader."Document Type"::"Return Order");
+        SalesHeader.SetRange(Status, SalesHeader.Status::Released);
+        if Setup."Location Code" <> '' then
+            SalesHeader.SetRange("Location Code", Setup."Location Code");
+        SalesHeader.SetRange("3PL SRO Exported", false);
+
+        if SalesHeader.FindSet() then
+            repeat
+                if TryExportSRO(SalesHeader, TempBlob, Err, false) then begin
+                    SuccessCount += 1;
+                    LogSROExportSuccess(SalesHeader."No.");
+                end else begin
+                    if Err = 'SRO already exported' then
+                        SkippedCount += 1
+                    else begin
+                        ErrorCount += 1;
+                        LogSROExportFailure(SalesHeader."No.", Err);
+                    end;
+                end;
+            until SalesHeader.Next() = 0;
+
+        LogExportSummary(SuccessCount + ErrorCount + SkippedCount, SuccessCount, ErrorCount, 'all released return orders');
+    end;
+
+    procedure ExportSelectedSROs(SelectionFilter: Text)
+    var
+        SalesHeader: Record "Sales Header";
+        SalesHeaderToExport: Record "Sales Header";
+        TempBlob: Codeunit "Temp Blob";
+        SuccessCount: Integer;
+        ErrorCount: Integer;
+        Err: Text;
+        Dims: Dictionary of [Text, Text];
+    begin
+        if not Setup.Get('3PL') then begin
+            Dims.Add('reason', 'setup_not_found');
+            Session.LogMessage('3PL-SETUP', '3PL SharePoint Setup not found', Verbosity::Error, DataClassification::SystemMetadata, TelemetryScope::ExtensionPublisher, Dims);
+            exit;
+        end;
+
+        SalesHeader.SetView(SelectionFilter);
+        SalesHeader.SetRange("Document Type", SalesHeader."Document Type"::"Return Order");
+
+        if SalesHeader.FindSet() then
+            repeat
+                if not SalesHeaderToExport.Get(SalesHeader."Document Type", SalesHeader."No.") then begin
+                    ErrorCount += 1;
+                    Clear(Dims);
+                    Dims.Add('orderNo', SalesHeader."No.");
+                    Session.LogMessage('3PL-RECORD-NOTFOUND', 'Return Order no longer exists', Verbosity::Warning, DataClassification::SystemMetadata, TelemetryScope::ExtensionPublisher, Dims);
+                    continue;
+                end;
+                if TryExportSRO(SalesHeaderToExport, TempBlob, Err, false) then begin
+                    SuccessCount += 1;
+                    LogSROExportSuccess(SalesHeaderToExport."No.");
+                end else begin
+                    ErrorCount += 1;
+                    LogSROExportFailure(SalesHeaderToExport."No.", Err);
+                end;
+            until SalesHeader.Next() = 0;
+
+        Clear(Dims);
+        Dims.Add('success', Format(SuccessCount));
+        Dims.Add('failed', Format(ErrorCount));
+        Session.LogMessage('3PL-SRO-EXPORT-SUMMARY', 'SRO batch export summary', Verbosity::Normal, DataClassification::SystemMetadata, TelemetryScope::ExtensionPublisher, Dims);
+    end;
+
+    procedure ResetSROExportStatus(OrderNo: Code[20])
+    var
+        SalesHeader: Record "Sales Header";
+        ThreePLArchive: Record "3PL Archive";
+        Dims: Dictionary of [Text, Text];
+    begin
+        if not SalesHeader.Get(SalesHeader."Document Type"::"Return Order", OrderNo) then begin
+            Clear(Dims);
+            Dims.Add('orderNo', OrderNo);
+            Session.LogMessage('3PL-SRO-RESET-NOTFOUND', 'Return Order not found for reset',
+                Verbosity::Warning, DataClassification::SystemMetadata,
+                TelemetryScope::ExtensionPublisher, Dims);
+            exit;
+        end;
+
+        SalesHeader."3PL SRO Exported" := false;
+        SalesHeader."3PL SRO Export Date" := 0D;
+        SalesHeader."3PL SRO Reception No." := '';
+        SalesHeader.Modify(true);
+
+        ThreePLArchive.SetRange("Document No.", OrderNo);
+        ThreePLArchive.SetRange("Direction", ThreePLArchive."Direction"::Export);
+        ThreePLArchive.SetRange("Step", ThreePLArchive."Step"::ExportReturnOrder);
+        ThreePLArchive.DeleteAll();
+
+        Clear(Dims);
+        Dims.Add('orderNo', OrderNo);
+        Session.LogMessage('3PL-SRO-RESET-STATUS', 'SRO export status reset',
+            Verbosity::Normal, DataClassification::SystemMetadata,
+            TelemetryScope::ExtensionPublisher, Dims);
+
+        if GuiAllowed then
+            Message('Export status reset for Return Order %1. It can now be exported again.', OrderNo);
+    end;
+
+    local procedure TryExportSRO(var SalesHeader: Record "Sales Header"; var TempBlob: Codeunit "Temp Blob"; var Err: Text; SkipSharePointUpload: Boolean): Boolean
+    var
+        OutS: OutStream;
+        InS: InStream;
+        XmlId: Integer;
+        FileName: Text;
+        OneOrder: Record "Sales Header";
+    begin
+        if AlreadySROExported(SalesHeader."No.") then begin
+            Err := 'SRO already exported';
+            exit(false);
+        end;
+
+        if not ValidateSROExportPreconditions(SalesHeader, Err) then
+            exit(false);
+
+        XmlId := Setup."Export SRO Xmlport ID";
+        FileName := SalesHeader."No." + '_return.xml';
+
+        if not PrepareSingleSROView(SalesHeader, OneOrder, Err) then
+            exit(false);
+
+        Clear(TempBlob);
+        TempBlob.CreateOutStream(OutS);
+
+        if not RunSROExport(XmlId, OneOrder, OutS) then begin
+            Err := 'SRO export failed';
+            exit(false);
+        end;
+
+        if not SkipSharePointUpload then begin
+            TempBlob.CreateInStream(InS);
+            if not Graph.UploadFile('3PL', Setup."SharePoint Export Folder", FileName, InS) then begin
+                Err := Graph.GetLastError();
+                exit(false);
+            end;
+        end;
+
+        UpdateSROExportStatus(SalesHeader);
+
+        // Critical: commit flag update before slow archive logging.
+        Commit();
+
+        ArchiveLog(true, "3PL Log Direction"::Export, SalesHeader."No.",
+            SalesHeader."External Document No.", FileName, Setup,
+            "3PL Archive Step"::ExportReturnOrder, '', '');
+
+        exit(true);
+    end;
+
+    local procedure ValidateSROExportPreconditions(var SalesHeader: Record "Sales Header"; var Err: Text): Boolean
+    begin
+        if not Setup.Get('3PL') then begin
+            Err := '3PL SharePoint Setup not found';
+            exit(false);
+        end;
+
+        if SalesHeader."Document Type" <> SalesHeader."Document Type"::"Return Order" then begin
+            Err := StrSubstNo('Only Sales Return Orders can be SRO-exported. Current: %1 %2',
+                Format(SalesHeader."Document Type"), SalesHeader."No.");
+            exit(false);
+        end;
+
+        if SalesHeader.Status <> SalesHeader.Status::Released then begin
+            Err := StrSubstNo('Return Order %1 must be Released before export (current: %2)',
+                SalesHeader."No.", Format(SalesHeader.Status));
+            exit(false);
+        end;
+
+        if SalesHeader."Location Code" <> Setup."Location Code" then begin
+            Err := StrSubstNo('Return Order %1 location "%2" does not match setup "%3"',
+                SalesHeader."No.", SalesHeader."Location Code", Setup."Location Code");
+            exit(false);
+        end;
+
+        if Setup."SharePoint Export Folder" = '' then begin
+            Err := 'SharePoint Export Folder is not configured';
+            exit(false);
+        end;
+
+        if Setup."Export SRO Xmlport ID" = 0 then begin
+            Err := 'Export SRO XMLport ID is not configured in Setup';
+            exit(false);
+        end;
+
+        exit(true);
+    end;
+
+    local procedure PrepareSingleSROView(var SourceSalesHeader: Record "Sales Header"; var TargetSalesHeader: Record "Sales Header"; var Err: Text): Boolean
+    begin
+        TargetSalesHeader.Reset();
+        TargetSalesHeader.SetRange("Document Type", SourceSalesHeader."Document Type");
+        TargetSalesHeader.SetRange("No.", SourceSalesHeader."No.");
+
+        if not TargetSalesHeader.FindFirst() then begin
+            Err := StrSubstNo('Return Order %1 no longer exists', SourceSalesHeader."No.");
+            exit(false);
+        end;
+
+        exit(true);
+    end;
+
+    local procedure RunSROExport(XmlId: Integer; var SalesHeader: Record "Sales Header"; OutS: OutStream): Boolean
+    begin
+        if XmlId = 0 then
+            exit(false);
+
+        XMLPORT.EXPORT(XmlId, OutS, SalesHeader);
+        exit(true);
+    end;
+
+    local procedure UpdateSROExportStatus(var SalesHeader: Record "Sales Header")
+    begin
+        SalesHeader."3PL SRO Exported" := true;
+        SalesHeader."3PL SRO Export Date" := Today;
+
+        if not SalesHeader.Modify(true) then
+            Error('Failed to update Sales Header export status for Return Order %1', SalesHeader."No.");
+    end;
+
+    // =========================================================================
+    // SRO Import Functions
+    // =========================================================================
+
+    procedure ImportSROConfirmationBatch(): Integer
+    var
+        FileList: List of [Text];
+        FileName: Text;
+        CountProcessed: Integer;
+        DummyBlob: Codeunit "Temp Blob";
+    begin
+        if not CheckSetup() then exit(0);
+
+        FileList := Graph.ListFilesInFolder('3PL', Setup."SharePoint Import Folder");
+
+        foreach FileName in FileList do
+            if IsSROFile(FileName) then begin
+                if not TryImportSROConfirmation(FileName, false, DummyBlob) then
+                    LogFileImportFailed(FileName, 'SRO');
+                CountProcessed += 1;
+            end;
+
+        LogBatchProcessed('SRO', CountProcessed);
+        exit(CountProcessed);
+    end;
+
+    procedure ImportSROFromStream(var UploadedBlob: Codeunit "Temp Blob"; FileNameHint: Text): Boolean
+    begin
+        if not CheckSetup() then exit(false);
+        exit(TryImportSROConfirmation(FileNameHint, true, UploadedBlob));
+    end;
+
+    procedure ImportSROForOrder(ReturnOrderNo: Code[20]): Boolean
+    var
+        SROFileName: Text;
+        DummyBlob: Codeunit "Temp Blob";
+    begin
+        if not FirstSROFileForOrder(ReturnOrderNo, SROFileName) then
+            exit(false);
+        exit(TryImportSROConfirmation(SROFileName, false, DummyBlob));
+    end;
+
+    local procedure TryImportSROConfirmation(FileName: Text; UseProvidedBlob: Boolean; var ProvidedBlob: Codeunit "Temp Blob"): Boolean
+    var
+        Success: Boolean;
+        ErrorMessage: Text;
+        NewFileName: Text;
+        InS: InStream;
+    begin
+        if not Setup.Get('3PL') then
+            exit(false);
+
+        ClearLastError();
+        if UseProvidedBlob then begin
+            ProvidedBlob.CreateInStream(InS, TextEncoding::UTF8);
+            Success := RunXmlPortImport_Try(Setup."Import SRO Xmlport ID", InS);
+        end else
+            Success := ImportSROConfirmationFromSharePoint_Try(FileName);
+
+        if not Success then
+            ErrorMessage := GetLastErrorText();
+
+        if UseProvidedBlob then
+            NewFileName := FileName
+        else begin
+            if Success then
+                NewFileName := BuildRenamedFileName(FileName, ImportedSuffixTok)
+            else
+                NewFileName := BuildRenamedFileName(FileName, '_error');
+
+            if NewFileName <> FileName then
+                if not RenameFile('3PL', Setup."SharePoint Import Folder", FileName, NewFileName) then
+                    LogMoveFailure(FileName, Graph.GetLastError());
+        end;
+
+        if Success then
+            LogFileImported(FileName, NewFileName, 'SRO')
+        else
+            LogFileImportFailed(FileName, NewFileName, ErrorMessage, 'SRO');
+
+        ArchiveLog(
+            Success,
+            "3PL Log Direction"::Import,
+            '',
+            '',
+            NewFileName,
+            Setup,
+            "3PL Archive Step"::ImportReturnConfirmation,
+            ErrorMessage,
+            Setup."SharePoint Import Folder"
+        );
+
+        if Success then
+            SweepAutoPostSROs();
+
+        exit(Success);
+    end;
+
+    [TryFunction]
+    local procedure ImportSROConfirmationFromSharePoint_Try(FileName: Text)
+    var
+        InnerErr: Text;
+    begin
+        if not ImportSROConfirmationFromSharePoint(FileName) then begin
+            InnerErr := GetLastErrorText();
+            if InnerErr = '' then
+                InnerErr := 'SRO XMLport import returned failure with no error details.';
+            Error(InnerErr);
+        end;
+    end;
+
+    local procedure ImportSROConfirmationFromSharePoint(FileName: Text): Boolean
+    var
+        SROXmlId: Integer;
+    begin
+        if not Setup.Get('3PL') then
+            Error('3PL SharePoint setup not configured');
+
+        SROXmlId := Setup."Import SRO Xmlport ID";
+        if SROXmlId = 0 then
+            Error('Import SRO XMLport ID is not configured in Setup.');
+
+        exit(ImportFileWithXmlPortId(FileName, SROXmlId));
+    end;
+
+    local procedure IsSROFile(FileName: Text): Boolean
+    var
+        NameLower: Text;
+    begin
+        if IsAlreadyProcessed(FileName) then
+            exit(false);
+        if not EndsWithXml(FileName) then
+            exit(false);
+
+        NameLower := LowerCase(FileName);
+        exit((StrPos(NameLower, '_returned') > 0) or (StrPos(NameLower, 'rc_return-') > 0));
+    end;
+
+    local procedure FirstSROFileForOrder(OrderNo: Code[20]; var MatchedName: Text): Boolean
+    var
+        FileList: List of [Text];
+        Name: Text;
+    begin
+        if not Setup.Get('3PL') then
+            Error('3PL SharePoint setup not configured');
+
+        FileList := Graph.ListFilesInFolder('3PL', Setup."SharePoint Import Folder");
+        foreach Name in FileList do
+            if MatchesSROPattern(OrderNo, Name) then begin
+                MatchedName := Name;
+                exit(true);
+            end;
+        exit(false);
+    end;
+
+    local procedure MatchesSROPattern(OrderNo: Code[20]; FileName: Text): Boolean
+    var
+        NameLower: Text;
+        OrderLower: Text;
+    begin
+        if IsAlreadyProcessed(FileName) then
+            exit(false);
+        if not EndsWithXml(FileName) then
+            exit(false);
+
+        NameLower := LowerCase(FileName);
+        OrderLower := LowerCase(OrderNo);
+
+        // EU: RAxxxxxx..._returned.xml. AU: RC_Return-<originalSO>-*.xml.
+        exit((StrPos(NameLower, OrderLower) > 0)
+            and ((StrPos(NameLower, '_returned') > 0) or (StrPos(NameLower, 'rc_return-') > 0)));
+    end;
+
+    local procedure LogSROExportSuccess(OrderNo: Code[20])
+    var
+        Dims: Dictionary of [Text, Text];
+    begin
+        Clear(Dims);
+        Dims.Add('orderNo', OrderNo);
+        Dims.Add('mode', 'SRO');
+        Session.LogMessage('3PL-SRO-EXPORT-OK', 'Return Order exported to SharePoint',
+            Verbosity::Normal, DataClassification::SystemMetadata,
+            TelemetryScope::ExtensionPublisher, Dims);
+    end;
+
+    local procedure LogSROExportFailure(OrderNo: Code[20]; ErrorMessage: Text)
+    var
+        Dims: Dictionary of [Text, Text];
+    begin
+        Clear(Dims);
+        Dims.Add('orderNo', OrderNo);
+        Dims.Add('error', CopyStr(ErrorMessage, 1, 250));
+        Dims.Add('mode', 'SRO');
+        Session.LogMessage('3PL-SRO-EXPORT-FAIL', 'Return Order export failed',
+            Verbosity::Error, DataClassification::SystemMetadata,
+            TelemetryScope::ExtensionPublisher, Dims);
+    end;
+
+    local procedure SweepAutoPostSROs()
+    var
+        SalesHeader: Record "Sales Header";
+        Dims: Dictionary of [Text, Text];
+        AutoPostDisabled: Boolean;
+    begin
+        if Setup.Get('3PL') then
+            AutoPostDisabled := Setup."SRO Auto-Post Disabled";
+
+        SalesHeader.SetRange("Document Type", SalesHeader."Document Type"::"Return Order");
+        SalesHeader.SetRange("Imported SRO Confirmation", true);
+        SalesHeader.SetRange("Imported SRO Conf. Date", Today);
+        SalesHeader.SetRange("3PL SRO Requires Review", false);
+        SalesHeader.SetRange("3PL SRO Auto-Post Attempted", false);
+        SalesHeader.SetRange(Status, SalesHeader.Status::Released);
+
+        if not SalesHeader.FindSet() then
+            exit;
+
+        repeat
+            if AutoPostDisabled then begin
+                Clear(Dims);
+                Dims.Add('orderNo', SalesHeader."No.");
+                Dims.Add('loopReturnId', SalesHeader."Loop Return ID");
+                Dims.Add('wouldInvoice', Format(SalesHeader."Loop Return ID" = ''));
+                Session.LogMessage('3PL-SRO-AUTOPOST-SKIPPED', 'SRO auto-post skipped (disabled in setup)',
+                    Verbosity::Normal, DataClassification::SystemMetadata,
+                    TelemetryScope::ExtensionPublisher, Dims);
+            end else
+                if not TryAutoPostSingleSRO(SalesHeader) then begin
+                    Clear(Dims);
+                    Dims.Add('orderNo', SalesHeader."No.");
+                    Dims.Add('error', CopyStr(GetLastErrorText(), 1, 250));
+                    Session.LogMessage('3PL-SRO-AUTOPOST-FAIL', 'SRO auto-post failed',
+                        Verbosity::Warning, DataClassification::SystemMetadata,
+                        TelemetryScope::ExtensionPublisher, Dims);
+                end;
+            MarkAutoPostAttempted(SalesHeader."No.");
+        until SalesHeader.Next() = 0;
+    end;
+
+    [TryFunction]
+    local procedure TryAutoPostSingleSRO(SalesHeaderToPost: Record "Sales Header")
+    var
+        SalesPost: Codeunit "Sales-Post";
+    begin
+        SalesHeaderToPost.Ship := false;
+        SalesHeaderToPost.Receive := true;
+        SalesHeaderToPost.Invoice := SalesHeaderToPost."Loop Return ID" = '';
+        SalesHeaderToPost.Modify();
+        Commit();
+
+        SalesPost.Run(SalesHeaderToPost);
+    end;
+
+    local procedure MarkAutoPostAttempted(OrderNo: Code[20])
+    var
+        SalesHeader: Record "Sales Header";
+    begin
+        if not SalesHeader.Get(SalesHeader."Document Type"::"Return Order", OrderNo) then
+            exit;
+        SalesHeader."3PL SRO Auto-Post Attempted" := true;
+        SalesHeader.Modify();
+    end;
+
+    [EventSubscriber(ObjectType::Codeunit, Codeunit::"Sales-Post", 'OnBeforePostSalesDoc', '', false, false)]
+    local procedure GuardSROPostingOnBeforePostSalesDoc(var SalesHeader: Record "Sales Header"; var IsHandled: Boolean)
+    begin
+        if SalesHeader."Document Type" <> SalesHeader."Document Type"::"Return Order" then
+            exit;
+        if not SalesHeader."3PL SRO Requires Review" then
+            exit;
+
+        Error('Cannot post Return Order %1: 3PL SRO discrepancies require review. Open the return order, review the discrepancy, and click "Clear 3PL Review Flag" before posting.', SalesHeader."No.");
     end;
 }

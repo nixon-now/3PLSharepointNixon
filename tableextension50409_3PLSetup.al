@@ -22,5 +22,28 @@ tableextension 50409 "3PL Setup Ext" extends "SharePoint Setup"
             Caption = 'Import Ship XMLport ID';
             ToolTip = 'Object ID used for importing ship confirmations.';
         }
+        field(50004; "Export SRO Xmlport ID"; Integer)
+        {
+            Caption = 'Export SRO XMLport ID';
+            ToolTip = 'Object ID used for exporting sales return orders to 3PL.';
+        }
+        field(50005; "Import SRO Xmlport ID"; Integer)
+        {
+            Caption = 'Import SRO XMLport ID';
+            ToolTip = 'Object ID used for importing return receipt confirmations from 3PL.';
+        }
+        field(50006; "SRO Auto-Post Disabled"; Boolean)
+        {
+            Caption = 'SRO Auto-Post Disabled';
+            ToolTip = 'When enabled, the auto-post sweep still runs and marks each SRO as attempted, but does not call Sales-Post. Use for sandbox testing.';
+        }
+        field(50007; "Set Shipment Date On Ship Import"; Boolean)
+        {
+            Caption = 'Set Shipment Date On Ship Import';
+        }
+        field(50008; "Move Failed Files To Error Folder"; Boolean)
+        {
+            Caption = 'Move Failed Files To Error Folder';
+        }
     }
 }
