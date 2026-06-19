@@ -99,7 +99,7 @@ pageextension 50493 "Sales Order List - 3PL Export" extends "Sales Order List"
                 ApplicationArea = All;
                 Caption = 'Process All Files (Pick & Shipment)';
                 Image = Process;
-                ToolTip = 'Imports every pick and shipment confirmation in the SharePoint inbox.';
+                ToolTip = 'Import every pick, shipment, and return confirmation in the SharePoint inbox.';
 
                 trigger OnAction()
                 var
