@@ -4,6 +4,10 @@ page 50499 "3PL Archive Card"
     SourceTable = "3PL Archive";
     ApplicationArea = All;
     UsageCategory = Documents;
+    Editable = false;
+    InsertAllowed = false;
+    ModifyAllowed = false;
+    DeleteAllowed = false;
 
     layout
     {
