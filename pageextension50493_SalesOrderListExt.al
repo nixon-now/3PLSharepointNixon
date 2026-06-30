@@ -108,6 +108,37 @@ pageextension 50493 "Sales Order List - 3PL Export" extends "Sales Order List"
                     SharePointMgmt.ProcessAll();
                 end;
             }
+
+            action("Reset 3PL Export Status")
+            {
+                ApplicationArea = All;
+                Caption = 'Reset 3PL Export Status';
+                Image = ResetStatus;
+                ToolTip = 'Reset the export status for selected orders so they can be exported again.';
+
+                trigger OnAction()
+                var
+                    ThreePLMgmt: Codeunit "3PL Order SharePoint Mgmt";
+                    SelectedSalesHeader: Record "Sales Header";
+                    Count: Integer;
+                begin
+                    CurrPage.SetSelectionFilter(SelectedSalesHeader);
+                    Count := SelectedSalesHeader.Count;
+
+                    if Count = 0 then
+                        Error('Please select at least one order to reset export status.');
+
+                    if not Confirm('Reset 3PL export status for %1 selected order(s)?\\This will reset the export flags and remove archive entries.', true, Count) then
+                        exit;
+
+                    if SelectedSalesHeader.FindSet() then
+                        repeat
+                            ThreePLMgmt.ResetExportStatus(SelectedSalesHeader."No.", false, true);
+                        until SelectedSalesHeader.Next() = 0;
+
+                    Message('Export status reset for %1 order(s). You can now export them again.', Count);
+                end;
+            }
         }
 
         addlast(Promoted)
@@ -120,6 +151,7 @@ pageextension 50493 "Sales Order List - 3PL Export" extends "Sales Order List"
                 actionref(Promoted_ExportSelected; "Export Selected to 3PL") { }
                 actionref(Promoted_ExportAllBatch; "Export All (Batch) to 3PL") { }
                 actionref(Promoted_ProcessAll; ProcessAll3PLFiles) { }
+                actionref(Promoted_ResetExport; "Reset 3PL Export Status") { }
             }
         }
     }
