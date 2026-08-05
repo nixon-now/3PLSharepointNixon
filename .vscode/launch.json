@@ -2,20 +2,6 @@
 {
 "configurations": [
   {
-    "name": "Attach: Microsoft cloud sandbox",
-    "type": "al",
-    "request": "attach",
-    "environmentType": "Sandbox",
-    "environmentName": "NixonAU_Sandbox",
-    "breakOnError": "All",
-    "breakOnRecordWrite": "None",
-    "enableSqlInformationDebugger": true,
-    "enableLongRunningSqlStatements": true,
-    "longRunningSqlStatementsThreshold": 500,
-    "numberOfSqlStatements": 10,
-    "breakOnNext": "WebServiceClient"
-  },
-  {
     "name": "EU_Sandbox_20260513",
     "type": "al",
     "request": "launch",
@@ -46,15 +32,6 @@
     "enableLongRunningSqlStatements": true,
     "longRunningSqlStatementsThreshold": 500,
     "numberOfSqlStatements": 10
-  },
-  {
-    "name": "snapshotInitialize: Microsoft production cloud",
-    "type": "al",
-    "request": "snapshotInitialize",
-    "environmentType": "Production",
-    "environmentName": "AU_Production",
-    "breakOnNext": "WebClient",
-    "executionContext": "DebugAndProfile"
   }
 ]
 }
