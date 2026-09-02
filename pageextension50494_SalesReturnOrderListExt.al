@@ -28,8 +28,6 @@ pageextension 50494 "Sales Return Order List - 3PL" extends "Sales Return Order 
 
                     EligibleOrders.SetRange("Document Type", EligibleOrders."Document Type"::"Return Order");
                     EligibleOrders.SetRange(Status, EligibleOrders.Status::Released);
-                    if Setup."Location Code" <> '' then
-                        EligibleOrders.SetRange("Location Code", Setup."Location Code");
                     EligibleOrders.SetRange("3PL SRO Exported", false);
                     EligibleOrders.SetRange("3PL Skipped", false);
                     EligibleCount := EligibleOrders.Count();
@@ -53,6 +51,36 @@ pageextension 50494 "Sales Return Order List - 3PL" extends "Sales Return Order 
                     Message('Batch export started for %1 return order(s). Check the Archive for results.', EligibleCount);
                 end;
             }
+            action("Reset 3PL Export Status")
+            {
+                ApplicationArea = All;
+                Caption = 'Reset 3PL Export Status';
+                Image = ResetStatus;
+                ToolTip = 'Reset the export status for selected orders so they can be exported again.';
+
+                trigger OnAction()
+                var
+                    ThreePLMgmt: Codeunit "3PL Order SharePoint Mgmt";
+                    SelectedSalesHeader: Record "Sales Header";
+                    Count: Integer;
+                begin
+                    CurrPage.SetSelectionFilter(SelectedSalesHeader);
+                    Count := SelectedSalesHeader.Count;
+
+                    if Count = 0 then
+                        Error('Please select at least one order to reset export status.');
+
+                    if not Confirm('Reset 3PL export status for %1 selected order(s)?\\This will reset the export flags and remove archive entries.', true, Count) then
+                        exit;
+
+                    if SelectedSalesHeader.FindSet() then
+                        repeat
+                            ThreePLMgmt.ResetSROExportStatus(SelectedSalesHeader."No.");
+                        until SelectedSalesHeader.Next() = 0;
+
+                    Message('Export status reset for %1 order(s). You can now export them again.', Count);
+                end;
+            }
         }
 
         addlast(Promoted)
@@ -63,6 +91,7 @@ pageextension 50494 "Sales Return Order List - 3PL" extends "Sales Return Order 
                 Image = Allocate;
 
                 actionref(Promoted_ExportAllBatch; "Export All (Batch) to 3PL") { }
+                actionref(Promoted_ResetExport; "Reset 3PL Export Status") { }
             }
         }
     }
