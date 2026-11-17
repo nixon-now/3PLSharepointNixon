@@ -34,7 +34,7 @@ xmlport 50431 "Export Orders to 3PL"
                     textelement(comment1) { }
 
                     fieldelement(contact; SalesHeader."Sell-to Contact") { }
-                    
+
                     fieldelement(ship_via; SalesHeader."Shipping Agent Code") { }
                     fieldelement(service; SalesHeader."Shipping Agent Service Code") { }
 
@@ -57,12 +57,12 @@ xmlport 50431 "Export Orders to 3PL"
                     {
                         textelement(code)
                         {
-                         trigger OnBeforePassVariable()
+                            trigger OnBeforePassVariable()
                             begin
                                 code := GetShipToCode();
                             end;
                         }
-                        
+
                         //fieldelement(name; SalesHeader."Ship-to Name") { }
 
                         textelement(name)
@@ -75,7 +75,7 @@ xmlport 50431 "Export Orders to 3PL"
                                     name := SalesHeader."Ship-to Name";
                             end;
                         }
-                       
+
 
                         fieldelement(address1; SalesHeader."Ship-to Address") { }
                         fieldelement(address2; SalesHeader."Ship-to Address 2") { }
@@ -112,12 +112,31 @@ xmlport 50431 "Export Orders to 3PL"
                         //textelement(lot) { }
                         textelement(serial) { }
                         fieldelement(description; SalesLine.Description) { }
-                        
+
                         //fieldelement(description2; SalesLine.Description) { }
-                        fieldelement(qty; SalesLine.Quantity) { }
+                        // qty = Reserved Quantity (calculated in OnAfterGetRecord); previously Quantity
+                        fieldelement(qty; SalesLine."Reserved Quantity") { }
                         textelement(comment) { }
+
+                        trigger OnAfterGetRecord()
+                        begin
+                            // 3PL location filter: only lines from locations flagged "3PL Location" are exported;
+                            // blank/unflagged locations (e.g. custom-watch spare parts) are skipped.
+                            if not ThreePLLocationFilter.IsThreePLLocation(SalesLine."Location Code") then
+                                currXMLport.Skip();
+
+                            // Quantity change: export the reserved quantity (FlowField). A 0 reservation is still exported as 0.
+                            SalesLine.CalcFields("Reserved Quantity");
+                        end;
                     }
                 }
+
+                trigger OnAfterGetRecord()
+                begin
+                    // Skip the whole order (no error) when none of its lines come from a 3PL location.
+                    if not ThreePLLocationFilter.HasThreePLLines(SalesHeader) then
+                        currXMLport.Skip();
+                end;
             }
         }
     }
@@ -127,6 +146,7 @@ xmlport 50431 "Export Orders to 3PL"
         "3PLSetup": Record "Sharepoint Setup";
         SalesSetup: Record "Sales & Receivables Setup";
         FilterSalesHeader: Record "Sales Header";
+        ThreePLLocationFilter: Codeunit "3PL Location Filter";
         Window: Dialog;
         SuppressMessages: Boolean;
         GuiAllowed: Boolean;
@@ -163,21 +183,22 @@ xmlport 50431 "Export Orders to 3PL"
         FilterSalesHeader.SetRange("Document Type", InFilterSalesHeader."Document Type");
         FilterSalesHeader.SetRange("No.", InFilterSalesHeader."No.");
     end;
-     local procedure GetWorkDescriptionText(SalesHeader: Record "Sales Header"): Text
-var
-    TypeHelper: Codeunit "Type Helper";
-    InStream: InStream;
-    WorkDescriptionText: Text;
-begin
-    SalesHeader.CalcFields("Work Description");
-    if not SalesHeader."Work Description".HasValue then
-        exit('');
 
-    SalesHeader."Work Description".CreateInStream(InStream);
-    WorkDescriptionText := TypeHelper.ReadAsTextWithSeparator(InStream, TypeHelper.LFSeparator());
-    
-    exit(WorkDescriptionText);
-end;
+    local procedure GetWorkDescriptionText(SalesHeader: Record "Sales Header"): Text
+    var
+        TypeHelper: Codeunit "Type Helper";
+        InStream: InStream;
+        WorkDescriptionText: Text;
+    begin
+        SalesHeader.CalcFields("Work Description");
+        if not SalesHeader."Work Description".HasValue then
+            exit('');
+
+        SalesHeader."Work Description".CreateInStream(InStream);
+        WorkDescriptionText := TypeHelper.ReadAsTextWithSeparator(InStream, TypeHelper.LFSeparator());
+
+        exit(WorkDescriptionText);
+    end;
 
     procedure SetSuppressMessages(Suppress: Boolean)
     begin

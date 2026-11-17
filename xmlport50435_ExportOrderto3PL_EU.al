@@ -131,29 +131,29 @@ xmlport 50435 "Export Orders to 3PL_EU"
                     textelement(cod_amount) { trigger OnBeforePassVariable() begin cod_amount := ''; end; }
                     textelement(gift_wrap) { trigger OnBeforePassVariable() begin gift_wrap := 'N'; end; }
                     //fieldelement(gift_message;  SalesHeader."Work Description")   { }
-                   textelement(gift_message)
-{
-    trigger OnBeforePassVariable()
-    var
-        WorkDescriptionText: Text;
-        CleanText: Text;
-        MaxLength: Integer;
-    begin
-        // Get the work description as text
-        WorkDescriptionText := GetWorkDescriptionText(SalesHeader);
-        MaxLength := 250;
-        
-        // Just trim and clean line breaks
-        // Clean the text - remove line breaks and trim
-        CleanText := CleanTextContent(WorkDescriptionText);
-        
-        // Truncate if needed
-        if StrLen(CleanText) > MaxLength then
-            gift_message := CopyStr(CleanText, 1, MaxLength)
-        else
-            gift_message := CleanText;
-    end;
-}
+                    textelement(gift_message)
+                    {
+                        trigger OnBeforePassVariable()
+                        var
+                            WorkDescriptionText: Text;
+                            CleanText: Text;
+                            MaxLength: Integer;
+                        begin
+                            // Get the work description as text
+                            WorkDescriptionText := GetWorkDescriptionText(SalesHeader);
+                            MaxLength := 250;
+
+                            // Just trim and clean line breaks
+                            // Clean the text - remove line breaks and trim
+                            CleanText := CleanTextContent(WorkDescriptionText);
+
+                            // Truncate if needed
+                            if StrLen(CleanText) > MaxLength then
+                                gift_message := CopyStr(CleanText, 1, MaxLength)
+                            else
+                                gift_message := CleanText;
+                        end;
+                    }
                     textelement(vat) { trigger OnBeforePassVariable() begin vat := ''; end; }
 
                     // ---------- SOLD-TO ----------
@@ -265,7 +265,8 @@ xmlport 50435 "Export Orders to 3PL_EU"
                         }
                         textelement(serial) { MinOccurs = Zero; }
                         fieldelement(description; SalesLine.Description) { }
-                        fieldelement(qty; SalesLine.Quantity) { }
+                        // qty = Reserved Quantity (calculated in OnAfterGetRecord); previously Quantity
+                        fieldelement(qty; SalesLine."Reserved Quantity") { }
 
                         // <comment> per line
                         textelement(line_comment)
@@ -350,8 +351,26 @@ xmlport 50435 "Export Orders to 3PL_EU"
                                     countryoforigin := Itm."Country/Region of Origin Code";
                             end;
                         }
+
+                        trigger OnAfterGetRecord()
+                        begin
+                            // 3PL location filter: only lines from locations flagged "3PL Location" are exported;
+                            // blank/unflagged locations (e.g. custom-watch spare parts from 31-EU) are skipped.
+                            if not ThreePLLocationFilter.IsThreePLLocation(SalesLine."Location Code") then
+                                currXMLport.Skip();
+
+                            // Quantity change: export the reserved quantity (FlowField). A 0 reservation is still exported as 0.
+                            SalesLine.CalcFields("Reserved Quantity");
+                        end;
                     }
                 }
+
+                trigger OnAfterGetRecord()
+                begin
+                    // Skip the whole order (no error) when none of its lines come from a 3PL location.
+                    if not ThreePLLocationFilter.HasThreePLLines(SalesHeader) then
+                        currXMLport.Skip();
+                end;
             }
         }
     }
@@ -359,6 +378,7 @@ xmlport 50435 "Export Orders to 3PL_EU"
     //──────────────────────── V A R I A B L E S ────────────────────────
     var
         ItemRef: Record "Item Reference";
+        ThreePLLocationFilter: Codeunit "3PL Location Filter";
     // for attributes & triggers
 
 
@@ -397,56 +417,57 @@ xmlport 50435 "Export Orders to 3PL_EU"
         exit('');
     end;
 
-  local procedure GetWorkDescriptionText(SalesHeader: Record "Sales Header"): Text
-var
-    TypeHelper: Codeunit "Type Helper";
-    InStream: InStream;
-    WorkDescriptionText: Text;
-begin
-    SalesHeader.CalcFields("Work Description");
-    if not SalesHeader."Work Description".HasValue then
-        exit('');
-    
-    // Use UTF8 encoding when creating the stream
-    SalesHeader."Work Description".CreateInStream(InStream, TextEncoding::UTF8);
-    WorkDescriptionText := TypeHelper.ReadAsTextWithSeparator(InStream, TypeHelper.LFSeparator());
-    
-    exit(WorkDescriptionText);
-end;
+    local procedure GetWorkDescriptionText(SalesHeader: Record "Sales Header"): Text
+    var
+        TypeHelper: Codeunit "Type Helper";
+        InStream: InStream;
+        WorkDescriptionText: Text;
+    begin
+        SalesHeader.CalcFields("Work Description");
+        if not SalesHeader."Work Description".HasValue then
+            exit('');
 
-local procedure CleanTextContent(InputText: Text): Text
-var
-    OutputText: Text;
-    CharPos: Integer;
-    CurrentChar: Char;
-    PrevChar: Char;
-begin
-    OutputText := '';
-    PrevChar := 0;
-    
-    for CharPos := 1 to StrLen(InputText) do begin
-        CurrentChar := InputText[CharPos];
-        
-        // Replace line breaks with space
-        if (CurrentChar = 13) or (CurrentChar = 10) then begin
-            if PrevChar <> ' ' then
-                OutputText += ' ';
-            PrevChar := ' ';
-        end
-        // Keep normal printable characters and UTF-8
-        else if CurrentChar >= ' ' then begin
-            OutputText += CurrentChar;
-            PrevChar := CurrentChar;
-        end
-        // Skip other control characters
-        else begin
-            PrevChar := 0;
-        end;
+        // Use UTF8 encoding when creating the stream
+        SalesHeader."Work Description".CreateInStream(InStream, TextEncoding::UTF8);
+        WorkDescriptionText := TypeHelper.ReadAsTextWithSeparator(InStream, TypeHelper.LFSeparator());
+
+        exit(WorkDescriptionText);
     end;
-    
-    // Trim and return
-    exit(OutputText.Trim());
-end;
+
+    local procedure CleanTextContent(InputText: Text): Text
+    var
+        OutputText: Text;
+        CharPos: Integer;
+        CurrentChar: Char;
+        PrevChar: Char;
+    begin
+        OutputText := '';
+        PrevChar := 0;
+
+        for CharPos := 1 to StrLen(InputText) do begin
+            CurrentChar := InputText[CharPos];
+
+            // Replace line breaks with space
+            if (CurrentChar = 13) or (CurrentChar = 10) then begin
+                if PrevChar <> ' ' then
+                    OutputText += ' ';
+                PrevChar := ' ';
+            end
+            // Keep normal printable characters and UTF-8
+            else if CurrentChar >= ' ' then begin
+                OutputText += CurrentChar;
+                PrevChar := CurrentChar;
+            end
+            // Skip other control characters
+            else begin
+                PrevChar := 0;
+            end;
+        end;
+
+        // Trim and return
+        exit(OutputText.Trim());
+    end;
+
     local procedure FormatDecEU(Val: Decimal): Text[20]
     var
         FormattedText: Text;
