@@ -1,10 +1,10 @@
 xmlport 50436 "Export Orders to 3PL_AU"
 {
-    Caption            = 'Export Orders (3PL Detailed)';
-    Direction          = Export;
-    Format             = Xml;
-    Encoding           = UTF8;
-    UseRequestPage     = false;
+    Caption = 'Export Orders (3PL Detailed)';
+    Direction = Export;
+    Format = Xml;
+    Encoding = UTF8;
+    UseRequestPage = false;
     PreserveWhiteSpace = true;
 
     schema
@@ -13,11 +13,11 @@ xmlport 50436 "Export Orders to 3PL_AU"
         {
             tableelement(SalesHeader; "Sales Header")
             {
-                XmlName  = 'order';
+                XmlName = 'order';
                 AutoSave = false;
                 SourceTableView = sorting("Document Type", "No.")
                                   where("Document Type" = const(Order),
-                                        Status          = const(Released));
+                                        Status = const(Released));
 
                 textattribute(OrderNoAttr)
                 {
@@ -51,7 +51,7 @@ xmlport 50436 "Export Orders to 3PL_AU"
                     }
 
                     fieldelement(po_no; SalesHeader."External Document No.") { }
-                    
+
                     textelement(shipon)
                     {
                         trigger OnBeforePassVariable()
@@ -76,7 +76,7 @@ xmlport 50436 "Export Orders to 3PL_AU"
                             preparation_code := SalesHeader."3PL Prep Code";
                         end;
                     }
-                    
+
                     textelement(status)
                     {
                         trigger OnBeforePassVariable()
@@ -152,14 +152,14 @@ xmlport 50436 "Export Orders to 3PL_AU"
                             WorkDescriptionText: Text;
                         begin
                             WorkDescriptionText := GetWorkDescriptionText(SalesHeader);
-                            
+
                             if StrLen(WorkDescriptionText) > 250 then
                                 gift_message := CopyStr(WorkDescriptionText, 1, 250)
                             else
                                 gift_message := WorkDescriptionText;
                         end;
                     }
-                    
+
                     textelement(language_code)
                     {
                         MinOccurs = Zero;
@@ -167,7 +167,7 @@ xmlport 50436 "Export Orders to 3PL_AU"
                         begin
                             language_code := '';
                         end;
-                    }                   
+                    }
 
                     // Sold-to section
                     textelement(soldto)
@@ -183,17 +183,17 @@ xmlport 50436 "Export Orders to 3PL_AU"
                         fieldelement(postal; SalesHeader."Sell-to Post Code") { }
                         fieldelement(contact; SalesHeader."Sell-to Contact") { }
                         fieldelement(phone; SalesHeader."Sell-to Phone No.") { }
-                        
+
                         textelement(soldto_fax)
                         {
-                            MinOccurs = Zero;    
+                            MinOccurs = Zero;
                             XmlName = 'fax';
                             trigger OnBeforePassVariable()
                             begin
                                 soldto_fax := '';
                             end;
                         }
-                        
+
                         fieldelement(email; SalesHeader."Sell-to E-Mail") { }
                     }
 
@@ -201,7 +201,7 @@ xmlport 50436 "Export Orders to 3PL_AU"
                     textelement(shipto)
                     {
                         fieldelement(code; SalesHeader."Ship-to Code") { }
-                        
+
                         textelement(clientstorecode)
                         {
                             trigger OnBeforePassVariable()
@@ -209,7 +209,7 @@ xmlport 50436 "Export Orders to 3PL_AU"
                                 clientstorecode := SalesHeader."Ship-to Code";
                             end;
                         }
-                        
+
                         fieldelement(name; SalesHeader."Ship-to Name") { }
                         fieldelement(name2; SalesHeader."Ship-to Name 2") { }
                         fieldelement(address1; SalesHeader."Ship-to Address") { }
@@ -218,7 +218,7 @@ xmlport 50436 "Export Orders to 3PL_AU"
                         fieldelement(province; SalesHeader."Ship-to County") { }
                         fieldelement(country; SalesHeader."Ship-to Country/Region Code") { }
                         fieldelement(postal; SalesHeader."Ship-to Post Code") { }
-                        
+
                         textelement(clientdepartment)
                         {
                             trigger OnBeforePassVariable()
@@ -226,23 +226,25 @@ xmlport 50436 "Export Orders to 3PL_AU"
                                 clientdepartment := '';
                             end;
                         }
-                        
-                        fieldelement(contact; SalesHeader."Ship-to Contact") {
-                            MinOccurs = Zero;    
+
+                        fieldelement(contact; SalesHeader."Ship-to Contact")
+                        {
+                            MinOccurs = Zero;
                         }
-                        fieldelement(phone; SalesHeader."Ship-to Phone No.") { 
-                            MinOccurs = Zero;    
+                        fieldelement(phone; SalesHeader."Ship-to Phone No.")
+                        {
+                            MinOccurs = Zero;
                         }
-                        
+
                         textelement(shipto_fax)
                         {
-                            MinOccurs = Zero;    
+                            MinOccurs = Zero;
                             trigger OnBeforePassVariable()
                             begin
                                 shipto_fax := '';
                             end;
                         }
-                        
+
                         fieldelement(email; SalesHeader."Sell-to E-Mail") { }
                     }
 
@@ -283,7 +285,7 @@ xmlport 50436 "Export Orders to 3PL_AU"
                                 gtin := GetGTIN(SalesLine);
                             end;
                         }
-                        
+
                         textelement(gtin2)
                         {
                             trigger OnBeforePassVariable()
@@ -291,16 +293,16 @@ xmlport 50436 "Export Orders to 3PL_AU"
                                 gtin2 := GetGTIN2(SalesLine);
                             end;
                         }
-                        
-                        textelement(lot) 
-                        { 
+
+                        textelement(lot)
+                        {
                             MinOccurs = Zero;
                             trigger OnBeforePassVariable()
                             begin
                                 lot := '';
                             end;
                         }
-                        
+
                         textelement(customer_sku_no)
                         {
                             MinOccurs = Zero;
@@ -309,19 +311,20 @@ xmlport 50436 "Export Orders to 3PL_AU"
                                 customer_sku_no := CustomerSKU(SalesLine);
                             end;
                         }
-                        
-                        textelement(serial) 
-                        { 
+
+                        textelement(serial)
+                        {
                             MinOccurs = Zero;
                             trigger OnBeforePassVariable()
                             begin
                                 serial := '';
                             end;
                         }
-                        
+
                         fieldelement(description; SalesLine.Description) { }
-                        fieldelement(qty; SalesLine.Quantity) { }
-                        
+                        // qty = Reserved Quantity (calculated in OnAfterGetRecord); previously Quantity
+                        fieldelement(qty; SalesLine."Reserved Quantity") { }
+
                         textelement(line_comment)
                         {
                             MinOccurs = Zero;
@@ -331,7 +334,7 @@ xmlport 50436 "Export Orders to 3PL_AU"
                                 line_comment := '';
                             end;
                         }
-                        
+
                         textelement(unit_price)
                         {
                             trigger OnBeforePassVariable()
@@ -342,16 +345,35 @@ xmlport 50436 "Export Orders to 3PL_AU"
                                     unit_price := Format(SalesLine."Unit Price", 0, 9);
                             end;
                         }
-                        
+
                         fieldelement(currency_code; SalesLine."Currency Code") { }
+
+                        trigger OnAfterGetRecord()
+                        begin
+                            // 3PL location filter: only lines from locations flagged "3PL Location" are exported;
+                            // blank/unflagged locations (e.g. custom-watch spare parts) are skipped.
+                            if not ThreePLLocationFilter.IsThreePLLocation(SalesLine."Location Code") then
+                                currXMLport.Skip();
+
+                            // Quantity change: export the reserved quantity (FlowField). A 0 reservation is still exported as 0.
+                            SalesLine.CalcFields("Reserved Quantity");
+                        end;
                     }
                 }
+
+                trigger OnAfterGetRecord()
+                begin
+                    // Skip the whole order (no error) when none of its lines come from a 3PL location.
+                    if not ThreePLLocationFilter.HasThreePLLines(SalesHeader) then
+                        currXMLport.Skip();
+                end;
             }
         }
     }
 
     var
         ItemRef: Record "Item Reference";
+        ThreePLLocationFilter: Codeunit "3PL Location Filter";
 
     local procedure GetWorkDescriptionText(SalesHeader: Record "Sales Header"): Text
     var
@@ -365,7 +387,7 @@ xmlport 50436 "Export Orders to 3PL_AU"
 
         SalesHeader."Work Description".CreateInStream(InStream);
         WorkDescriptionText := TypeHelper.ReadAsTextWithSeparator(InStream, TypeHelper.LFSeparator());
-        
+
         exit(WorkDescriptionText);
     end;
 
@@ -421,7 +443,7 @@ xmlport 50436 "Export Orders to 3PL_AU"
 
         exit('');
     end;
-    
+
     local procedure GetGTIN2(SL: Record "Sales Line"): Code[30]
     var
         Itm: Record Item;

@@ -6,7 +6,10 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
     var
         Graph: Codeunit "SharePoint Graph Connector";
         Setup: Record "SharePoint Setup";
+        ThreePLLocationFilter: Codeunit "3PL Location Filter";
         ImportedSuffixTok: Label '_imported', Locked = true;
+        NoThreePLLinesTok: Label 'No sales lines from a 3PL location', Locked = true;
+        NoThreePLLinesMsg: Label 'Order %1 was not exported: none of its lines are from a 3PL location.', Comment = '%1 = Sales Order No.';
 
     // =========================================================================
     // Export Functions
@@ -69,13 +72,16 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
                 Dims.Add('orderNo', SalesHeader."No.");
                 Session.LogMessage('3PL-EXPORT-OK', 'Order exported to SharePoint', Verbosity::Normal, DataClassification::SystemMetadata, TelemetryScope::ExtensionPublisher, Dims);
             end
-            else begin
-                ErrorCount += 1;
-                Clear(Dims);
-                Dims.Add('orderNo', SalesHeader."No.");
-                Dims.Add('error', CopyStr(Err, 1, 250));
-                Session.LogMessage('3PL-EXPORT-FAIL', 'Export failed', Verbosity::Error, DataClassification::SystemMetadata, TelemetryScope::ExtensionPublisher, Dims);
-            end;
+            else
+                if Err = NoThreePLLinesTok then
+                    LogExportSkipped(SalesHeader."No.", Err)
+                else begin
+                    ErrorCount += 1;
+                    Clear(Dims);
+                    Dims.Add('orderNo', SalesHeader."No.");
+                    Dims.Add('error', CopyStr(Err, 1, 250));
+                    Session.LogMessage('3PL-EXPORT-FAIL', 'Export failed', Verbosity::Error, DataClassification::SystemMetadata, TelemetryScope::ExtensionPublisher, Dims);
+                end;
         end;
         Clear(Dims);
         Dims.Add('selected', Format(SelectedRecords));
@@ -115,13 +121,16 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
                     Dims.Add('orderNo', SalesHeaderToExport."No.");
                     Session.LogMessage('3PL-EXPORT-OK', 'Order exported to SharePoint', Verbosity::Normal, DataClassification::SystemMetadata, TelemetryScope::ExtensionPublisher, Dims);
                 end
-                else begin
-                    ErrorCount += 1;
-                    Clear(Dims);
-                    Dims.Add('orderNo', SalesHeaderToExport."No.");
-                    Dims.Add('error', CopyStr(Err, 1, 250));
-                    Session.LogMessage('3PL-EXPORT-FAIL', 'Export failed', Verbosity::Error, DataClassification::SystemMetadata, TelemetryScope::ExtensionPublisher, Dims);
-                end;
+                else
+                    if Err = NoThreePLLinesTok then
+                        LogExportSkipped(SalesHeaderToExport."No.", Err)
+                    else begin
+                        ErrorCount += 1;
+                        Clear(Dims);
+                        Dims.Add('orderNo', SalesHeaderToExport."No.");
+                        Dims.Add('error', CopyStr(Err, 1, 250));
+                        Session.LogMessage('3PL-EXPORT-FAIL', 'Export failed', Verbosity::Error, DataClassification::SystemMetadata, TelemetryScope::ExtensionPublisher, Dims);
+                    end;
             until SalesHeader.Next() = 0;
         Clear(Dims);
         Dims.Add('success', Format(SuccessCount));
@@ -147,11 +156,16 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
             LogExportSuccess(InSalesHeader."No.", SuccessCount);
             if GuiAllowed then
                 Message('Order %1 , External Doc. No. %2 has been successfully exported to SharePoint.', InSalesHeader."No.", InSalesHeader."External Document No.");
-        end else begin
-            LogExportFailure(InSalesHeader."No.", Err);
-            if GuiAllowed then
-                Error('Failed to export order %1: %2', InSalesHeader."No.", Err);
-        end;
+        end else
+            if Err = NoThreePLLinesTok then begin
+                LogExportSkipped(InSalesHeader."No.", Err);
+                if GuiAllowed then
+                    Message(NoThreePLLinesMsg, InSalesHeader."No.");
+            end else begin
+                LogExportFailure(InSalesHeader."No.", Err);
+                if GuiAllowed then
+                    Error('Failed to export order %1: %2', InSalesHeader."No.", Err);
+            end;
     end;
 
     procedure ExportOrder(var SalesHeader: Record "Sales Header"; IsCOD: Boolean): Boolean
@@ -165,11 +179,16 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
             LogExportSuccess(SalesHeader."No.", IsCOD);
             if GuiAllowed then
                 Message('%1 has been successfully exported to SharePoint.', SalesHeader."No.");
-        end else begin
-            LogExportFailure(SalesHeader."No.", Err, IsCOD);
-            if GuiAllowed then
-                Error('Failed to export %1: %2: ', SalesHeader."No.", Err);
-        end;
+        end else
+            if Err = NoThreePLLinesTok then begin
+                LogExportSkipped(SalesHeader."No.", Err);
+                if GuiAllowed then
+                    Message(NoThreePLLinesMsg, SalesHeader."No.");
+            end else begin
+                LogExportFailure(SalesHeader."No.", Err, IsCOD);
+                if GuiAllowed then
+                    Error('Failed to export %1: %2: ', SalesHeader."No.", Err);
+            end;
         exit(Success);
     end;
 
@@ -204,12 +223,16 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
                     SuccessCount += 1;
                     LogExportSuccess(SalesHeader."No.", SuccessCount);
                 end else begin
-                    if Err = 'Order already exported' then
-                        SkippedCount += 1
-                    else begin
-                        ErrorCount += 1;
-                        LogExportFailure(SalesHeader."No.", Err, ErrorCount);
-                    end;
+                    if Err = NoThreePLLinesTok then begin
+                        SkippedCount += 1;
+                        LogExportSkipped(SalesHeader."No.", Err);
+                    end else
+                        if Err = 'Order already exported' then
+                            SkippedCount += 1
+                        else begin
+                            ErrorCount += 1;
+                            LogExportFailure(SalesHeader."No.", Err, ErrorCount);
+                        end;
                 end;
             until SalesHeader.Next() = 0;
 
@@ -290,6 +313,13 @@ codeunit 50400 "3PL Order SharePoint Mgmt"
 
         if not ValidateExportPreconditions(SalesHeader, IsCODExport, Err) then
             exit(false);
+
+        // Skip-order behavior: if no lines remain after the 3PL location filter (e.g. only spare parts
+        // from non-3PL locations), do not generate/upload an XML file. Callers treat this as a skip, not an error.
+        if (not IsCODExport) and (not ThreePLLocationFilter.HasThreePLLines(SalesHeader)) then begin
+            Err := NoThreePLLinesTok;
+            exit(false);
+        end;
 
         // 2. Prepare the export data (fast)
         if IsCODExport then begin
