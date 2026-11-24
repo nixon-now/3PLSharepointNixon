@@ -1,4 +1,4 @@
-pageextension 50100 "Location Card 3PL" extends "Location Card"
+pageextension 50400 "Location Card 3PL" extends "Location Card"
 {
     layout
     {

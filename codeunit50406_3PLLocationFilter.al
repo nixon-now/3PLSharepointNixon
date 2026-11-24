@@ -1,4 +1,4 @@
-codeunit 50101 "3PL Location Filter"
+codeunit 50406 "3PL Location Filter"
 {
     // Decides which sales lines belong in the 3PL order export. Only lines whose
     // "Location Code" points to a Location with "3PL Location" = true are sent to the 3PL;

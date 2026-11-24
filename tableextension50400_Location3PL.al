@@ -1,8 +1,8 @@
-tableextension 50100 "Location 3PL" extends Location
+tableextension 50400 "Location 3PL" extends Location
 {
     fields
     {
-        field(50100; "3PL Location"; Boolean)
+        field(50400; "3PL Location"; Boolean)
         {
             DataClassification = CustomerContent;
             Caption = '3PL Location';
